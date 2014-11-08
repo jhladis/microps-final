@@ -1,3 +1,10 @@
+/* MicroPs Final Project
+  Robert Gambee and Jirka Hladis
+  Fall 2014
+  
+  Pong program System Verilog code
+*/
+
 module toplevel(          input  logic    clk,
 			  output logic       vgaclk,		   // 25 MHz VGA clock
 			  output logic       hsync, vsync, sync_b, // to monitor & DAC
