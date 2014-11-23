@@ -40,6 +40,7 @@ short ballXvel = 0;
 short ballYvel = 0;
 short pad1Ypos = 0;
 short pad2Ypos = 0;
+short halfpadwidth = 0;
 char score1 = 0;
 char score2 = 0;
 
@@ -61,17 +62,54 @@ void delay (unsigned int usec);
 void main(void) {
 
 ps2setup();
+//initSPI();
 
  while(1) { 
  	coorinfo = recvData(); 
  	// The tertiary operator is to determine if we should sign extend 
  	// the movement data.
-	xpos += (COORINFO_XSIGN & coorinfo) ? 
- 	0xFFF0 | recvData() : recvData(); 
+//	xpos += (COORINFO_XSIGN & coorinfo) ? 
+// 	0xFFF0 | recvData() : recvData(); 
  	ypos += (COORINFO_YSIGN & coorinfo) ? 
  	0xFFF0 | recvData() : recvData(); 
- 	PORTD = xpos >> 8; // Drive MSB of xpos on PORTD. 
-
+ 	PORTD = xpos >> 8; // Drive MSB of xpos on PORTD.
+ 	
+ 	//keep within screen
+ 	if (ypos>480) ypos=480;
+ 	if (ypos<0) ypos=0;
+ 	
+ 	
+ 	ballXpos=ballXpos+ballXvel;
+ 	ballYpos=ballYpos+ballYvel;
+ 	if (ballXpos>640) {
+ 		ballXpos=640;
+ 		ballXvel=-1*ballXvel;
+ 	}
+ 	if (ballXpos<0) {
+ 		if (ballYpos<padYpos+halfpadwidth && ballYpos>padYpos-halfpadwidth) {
+ 			// means reflected with paddle
+ 			ballXpos=0;
+ 			ballXvel=-1*ballXvel;
+ 		} else { //reset ball with default values
+ 			// if missed paddle
+ 			score2++; 
+ 			short ballXpos = 0;
+ 			short ballYpos = 0;
+ 			short ballXvel = 0;
+ 			short ballYvel = 0;
+ 		}
+ 		}
+ 	}
+ 	
+ 	if (ballYpos>480) {
+ 		ballYpos=480;
+ 		ballYvel=-1*ballYvel;
+ 	}
+ 	if (ballYpos<0) {
+ 		ballYpos=0;
+ 		ballYvel=-1*ballYvel;
+ 	}
+	
  } 
 }
 
@@ -159,14 +197,7 @@ while(recvData() != MS_DEVICE_ID); // Wait for mouse device id to be
 void delay (unsigned int usec) {
  unsigned int start, stop;
 
-  /* get start ticks */
   WriteCoreTimer(0);
-
-  /* calculate number of ticks for the given number of microseconds */
-  //stop = ReadCoreTimer() + usec*2; // core timer frequnecy is 20Hz
-
-  //stop = usec*7;
-  /* wait till Count reaches the stop value */
 
   while (ReadCoreTimer() < usec);
 }
