@@ -23,8 +23,11 @@
 #define clk_odc ODCEbits.ODCE0
 #define dataline_odc ODCEbits.ODCE1
 
+#define MS_REMOTE_MODE 0xf0
+#define MS_READ_DATA 0xeb
 #define MS_RESET 0xff 
-#define MS_DATA_REPORTING_ENABLED 0xf4 
+#define MS_DATA_REPORTING_ENABLED 0xf4
+#define MS_DATA_REPORTING_DISABLED 0xf5 
 #define MS_SUCCESS 0xaa 
 #define MS_DEVICE_ID 0x00 
 #define MS_ACKNOWLEDGEMENT 0xfa 
@@ -56,6 +59,10 @@ void updateBall(void);        // update ball position and velocity
 #define DEFYVEL_BALL 1
 #define UPDATE_PERIOD 800 //30ms refresh period, 20MHz Pb_clk, 1:256 prescaler
 
+#define HALFPADWIDTH 25 //pixel width/2
+#define PADTHICKNESS 10
+#define BALLRADIUS 10
+
 // global variables
 long ballXpos = DEFXPOS_BALL; // 10 bits for each position
 long ballYpos = DEFYPOS_BALL;
@@ -63,7 +70,7 @@ long pad1Ypos = 240; // start at midpoint of screen
 long pad2Ypos = 240;
 signed short ballXvel = DEFXVEL_BALL; // initialize to default
 signed short ballYvel = DEFYVEL_BALL;
-short halfpadwidth = 50; //pixel width/2
+
 short soundSel = 0; // up to 12 bit sound selecor
 short score1 = 0; // 6 bits for score
 short score2 = 0; 
@@ -79,14 +86,14 @@ unsigned char coorinfo;
 
 void main(void) {
 
-//ps2setup();
+ps2setup();
 initSPI();
 initTimers();
 
 //TRISD = 0; // PORTD as output, to display x-axis.
 
  while(1) {
-	//readMouse();
+	readMouse();
 
 	if (TMR1>=UPDATE_PERIOD){
     	TMR1=0; // reset timer
@@ -108,11 +115,11 @@ void updateBall(void){
  	}
 
  	if (ballXpos<0) {
- 		//if (ballYpos<pad1Ypos+halfpadwidth && ballYpos>pad1Ypos-halfpadwidth) {
+ 	//	if (ballYpos<pad1Ypos+HALFPADWIDTH && ballYpos>pad1Ypos-HALFPADWIDTH) {
  			// means reflected with paddle
  			ballXpos=0;
  			ballXvel=-1*ballXvel;
- 		/*} else { //reset ball with default values
+ 	/*	} else { //reset ball with default values
  			// if missed paddle, incement other player's score, reset ball
  			score2++; 
  			short ballXpos = DEFXPOS_BALL;
@@ -140,7 +147,7 @@ void sendtoFPGA(void){
 	//mask off to prevent overflow
 	unsigned long send1 = (ballXpos<<22)|(ballYpos<<12)|((0x3f&score1)<<6)|(0x3f&score2);
 	unsigned long send2 = (pad1Ypos<<22)|(pad2Ypos<<12)|(0xfff&soundSel);
-	spi_send_receive(send1, send2);
+	spi_send_receive(send2, send1);
 }
 
 
@@ -208,18 +215,21 @@ void spi_send_receive(unsigned long send1, unsigned long send2) {
 // PS2 communication, adapted from "MicroToys Guide: PS/2 Mouse N. Pinckney April 2005"
 
 void readMouse(void){
+	sendData(MS_READ_DATA); //request data
+	while(recvData() != MS_ACKNOWLEDGEMENT); // Wait for acknowledgement
 	coorinfo = recvData(); // Mouse coordinate information 
  	// The tertiary operator is to determine if we should sign extend 
  	// the movement data.
 	xpos += (COORINFO_XSIGN & coorinfo) ? 
     0xFFF0 | recvData() : recvData(); 
  	pad1Ypos += (COORINFO_YSIGN & coorinfo) ? 
- 	0xFFF0 | recvData() : recvData();
- 	
+ 	0xFFFFFFF0 | recvData() : recvData();
+ 
  	//keep within screen
  	if (pad1Ypos>480) pad1Ypos=480;
  	if (pad1Ypos<0) pad1Ypos=0;
-	PORTD = xpos;
+	
+	//PORTD = pad1Ypos>>2;
 }
 
 void sendData(unsigned char data) { 
@@ -263,7 +273,7 @@ unsigned char recvData(void) {
  while(!clk) ; // Wait until clock is high. 
  // 8 bits of data 
  for(i=0; i < 8; i++) { 
- while(clk); // Wait until clock line is low. 
+  while(clk); // Wait until clock line is low. 
  data = data >> 1; // Shift buffer. 
  data += dataline * 0x80; // Read next bit into buffer. 
  parity += data & 0x1; // Update parity. 
@@ -282,25 +292,19 @@ unsigned char recvData(void) {
 void ps2setup(void) { 
  clk_odc = 1; // enable open drain output on clock pin
  dataline_odc = 1; //  enable open drain output on data pin
- //clk_tris = 1; // Clock as input. (Open collector) 
- //dataline_tris = 1; // Dataline as input. (Open collector) 
- 
-sendData(MS_RESET); // Reset mouse. 
-//unsigned char test=recvData();
+ sendData(MS_RESET); // Reset mouse. 
 
-while(recvData() != MS_SUCCESS); // Wait for self-test success. 
-while(recvData() != MS_DEVICE_ID); // Wait for mouse device id to be 
+ while(recvData() != MS_SUCCESS); // Wait for self-test success. 
+ while(recvData() != MS_DEVICE_ID); // Wait for mouse device id to be 
 // sent. 
- sendData(MS_DATA_REPORTING_ENABLED); // Enable data reporting. 
- while(recvData() != MS_ACKNOWLEDGEMENT); // Wait for acknowledgement 
+// sendData(MS_REMOTE_MODE); // Enable data reporting. 
+ //while(recvData() != MS_ACKNOWLEDGEMENT); // Wait for acknowledgement 
  // that mouse is in data reporting 
 // mode. 
 }
 
 void delay (unsigned int usec) {
  unsigned int start, stop;
-
   WriteCoreTimer(0);
-
   while (ReadCoreTimer() < usec);
 }
