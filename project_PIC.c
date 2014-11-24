@@ -7,9 +7,6 @@
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #include <P32xxxx.h>
-//#include <proc/P32MX675F512H.h>
-//#include <peripheral/timer.h>
-//#include <plib.h>
 
 #define fpga_reset PORTFbits.RF0
 #define fpga_reset_tris TRISFbits.TRISF0
@@ -295,12 +292,8 @@ void ps2setup(void) {
  sendData(MS_RESET); // Reset mouse. 
 
  while(recvData() != MS_SUCCESS); // Wait for self-test success. 
- while(recvData() != MS_DEVICE_ID); // Wait for mouse device id to be 
-// sent. 
-// sendData(MS_REMOTE_MODE); // Enable data reporting. 
- //while(recvData() != MS_ACKNOWLEDGEMENT); // Wait for acknowledgement 
- // that mouse is in data reporting 
-// mode. 
+ while(recvData() != MS_DEVICE_ID); // Wait for mouse device id to be sent. 
+
 }
 
 void delay (unsigned int usec) {
