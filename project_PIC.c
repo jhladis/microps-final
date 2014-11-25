@@ -78,12 +78,6 @@ short soundSel = 0; // up to 12 bit sound selecor
 short score1 = 0; // 6 bits for score
 short score2 = 0; 
 
-
-unsigned short xpos=0,ypos=0; // Absolute x and y positions. 
-unsigned char coorinfo;
-
-
-
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
@@ -111,32 +105,32 @@ void updateBall(void){
  	ballXpos=ballXpos+ballXvel;
  	ballYpos=ballYpos+ballYvel;
  	
-	if (ballXpos>640) {
- 		ballXpos=640;
+	if (ballXpos>640-BALLRADIUS) {
+ 		ballXpos=640-BALLRADIUS;
  		ballXvel=-1*ballXvel;
  	}
 
- 	if (ballXpos<0) {
- 	//	if (ballYpos<pad1Ypos+HALFPADWIDTH && ballYpos>pad1Ypos-HALFPADWIDTH) {
+ 	if (ballXpos<BALLRADIUS) {
+ 		if (ballYpos<pad1Ypos+HALFPADWIDTH && ballYpos>pad1Ypos-HALFPADWIDTH) {
  			// means reflected with paddle
- 			ballXpos=0;
+ 			ballXpos=BALLRADIUS;
  			ballXvel=-1*ballXvel;
- 	/*	} else { //reset ball with default values
+ 		} else { //reset ball with default values
  			// if missed paddle, incement other player's score, reset ball
  			score2++; 
  			short ballXpos = DEFXPOS_BALL;
  			short ballYpos = DEFYPOS_BALL;
  			short ballXvel = DEFXVEL_BALL;
  			short ballYvel = DEFYVEL_BALL;
- 		}*/
+ 		}
  	}
 	
- 	if (ballYpos>480) {
- 		ballYpos=480;
+ 	if (ballYpos>480-BALLRADIUS) {
+ 		ballYpos=480-BALLRADIUS;
  		ballYvel=-1*ballYvel;
  	}
- 	if (ballYpos<0) {
- 		ballYpos=0;
+ 	if (ballYpos<BALLRADIUS) {
+ 		ballYpos=BALLRADIUS;
  		ballYvel=-1*ballYvel;
  	}
 }
@@ -149,7 +143,7 @@ void sendtoFPGA(void){
 	//mask off to prevent overflow
 	unsigned long send1 = (ballXpos<<22)|(ballYpos<<12)|((0x3f&score1)<<6)|(0x3f&score2);
 	unsigned long send2 = (pad1Ypos<<22)|(pad2Ypos<<12)|(0xfff&soundSel);
-	spi_send_receive(send2, send1);
+	spi_send_receive(send1, send2);
 }
 
 
@@ -219,22 +213,21 @@ void spi_send_receive(unsigned long send1, unsigned long send2) {
 void readMouse(char mouse){
 	sendData(MS_READ_DATA, mouse); //request data
 	while(recvData(mouse) != MS_ACKNOWLEDGEMENT); // Wait for acknowledgement
-	coorinfo = recvData(mouse); // Mouse coordinate information 
+	unsigned char coorinfo = recvData(mouse); // Mouse coordinate information 
  	// The tertiary operator is to determine if we should sign extend 
  	// the movement data.
-	xpos += (COORINFO_XSIGN & coorinfo) ? 
-    0xFFF0 | recvData(mouse) : recvData(mouse);
+	short xpos = recvData(mouse);
 	if (mouse) {
 	 	pad2Ypos -= (COORINFO_YSIGN & coorinfo) ? 
  		0xFFFFFFF0 | recvData(mouse) : recvData(mouse);
 		//keep within screen
-		if (pad2Ypos>480) pad2Ypos=480;
+		if (pad2Ypos>480-2*HALFPADWIDTH) pad2Ypos=480-2*HALFPADWIDTH;
 		if (pad2Ypos<0) pad2Ypos=0;
 	} else {
 		pad1Ypos -= (COORINFO_YSIGN & coorinfo) ? 
  		0xFFFFFFF0 | recvData(mouse) : recvData(mouse);
 		//keep within screen
-		if (pad1Ypos>480) pad1Ypos=480;
+		if (pad1Ypos>480-2*HALFPADWIDTH) pad1Ypos=480-2*HALFPADWIDTH;
 		if (pad1Ypos<0) pad1Ypos=0;
 	}
 }
