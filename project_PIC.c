@@ -11,20 +11,26 @@
 #define fpga_reset PORTFbits.RF0
 #define fpga_reset_tris TRISFbits.TRISF0
 
-#define clk PORTEbits.RE0 
-#define dataline PORTEbits.RE1
+#define clk1 PORTEbits.RE0 
+#define dataline1 PORTEbits.RE1 
 // Remember: TRIS has 0 for output and 1 for input. 
-#define clk_tris TRISEbits.TRISE0
-#define dataline_tris TRISEbits.TRISE1 
+#define clk_tris1 TRISEbits.TRISE0
+#define dataline_tris1 TRISEbits.TRISE1 
 // define bits for setting open drain mode
-#define clk_odc ODCEbits.ODCE0
-#define dataline_odc ODCEbits.ODCE1
+#define clk_odc1 ODCEbits.ODCE0
+#define dataline_odc1 ODCEbits.ODCE1
 
-#define MS_REMOTE_MODE 0xf0
+#define clk2 PORTEbits.RE2 
+#define dataline2 PORTEbits.RE3 
+// Remember: TRIS has 0 for output and 1 for input. 
+#define clk_tris2 TRISEbits.TRISE2
+#define dataline_tris2 TRISEbits.TRISE3 
+// define bits for setting open drain mode
+#define clk_odc2 ODCEbits.ODCE2
+#define dataline_odc2 ODCEbits.ODCE3
+
 #define MS_READ_DATA 0xeb
 #define MS_RESET 0xff 
-#define MS_DATA_REPORTING_ENABLED 0xf4
-#define MS_DATA_REPORTING_DISABLED 0xf5 
 #define MS_SUCCESS 0xaa 
 #define MS_DEVICE_ID 0x00 
 #define MS_ACKNOWLEDGEMENT 0xfa 
@@ -37,9 +43,9 @@
 // function prototypes
 void ps2setup(void);          // set up ps2 mouse connection
 void delay (unsigned int usec);
-void sendData(unsigned char data); 
-unsigned char recvData(void); 
-void readMouse(void);         // read amd process data from mouse
+void sendData(unsigned char data, char mouse);
+unsigned char recvData(char mouse);
+void readMouse(char mouse);         // read and process data from mouse
 
 void initSPI(void);           // initialize SPI link with FPGA
 void spi_send_receive(unsigned long send1, unsigned long send2);
@@ -87,10 +93,9 @@ ps2setup();
 initSPI();
 initTimers();
 
-//TRISD = 0; // PORTD as output, to display x-axis.
-
  while(1) {
-	readMouse();
+	readMouse(0);
+	readMouse(1);
 
 	if (TMR1>=UPDATE_PERIOD){
     	TMR1=0; // reset timer
@@ -211,90 +216,155 @@ void spi_send_receive(unsigned long send1, unsigned long send2) {
 
 // PS2 communication, adapted from "MicroToys Guide: PS/2 Mouse N. Pinckney April 2005"
 
-void readMouse(void){
-	sendData(MS_READ_DATA); //request data
-	while(recvData() != MS_ACKNOWLEDGEMENT); // Wait for acknowledgement
-	coorinfo = recvData(); // Mouse coordinate information 
+void readMouse(char mouse){
+	sendData(MS_READ_DATA, mouse); //request data
+	while(recvData(mouse) != MS_ACKNOWLEDGEMENT); // Wait for acknowledgement
+	coorinfo = recvData(mouse); // Mouse coordinate information 
  	// The tertiary operator is to determine if we should sign extend 
  	// the movement data.
 	xpos += (COORINFO_XSIGN & coorinfo) ? 
-    0xFFF0 | recvData() : recvData(); 
- 	pad1Ypos += (COORINFO_YSIGN & coorinfo) ? 
- 	0xFFFFFFF0 | recvData() : recvData();
- 
- 	//keep within screen
- 	if (pad1Ypos>480) pad1Ypos=480;
- 	if (pad1Ypos<0) pad1Ypos=0;
-	
-	//PORTD = pad1Ypos>>2;
+    0xFFF0 | recvData(mouse) : recvData(mouse);
+	if (mouse) {
+	 	pad2Ypos -= (COORINFO_YSIGN & coorinfo) ? 
+ 		0xFFFFFFF0 | recvData(mouse) : recvData(mouse);
+		//keep within screen
+		if (pad2Ypos>480) pad2Ypos=480;
+		if (pad2Ypos<0) pad2Ypos=0;
+	} else {
+		pad1Ypos -= (COORINFO_YSIGN & coorinfo) ? 
+ 		0xFFFFFFF0 | recvData(mouse) : recvData(mouse);
+		//keep within screen
+		if (pad1Ypos>480) pad1Ypos=480;
+		if (pad1Ypos<0) pad1Ypos=0;
+	}
 }
 
-void sendData(unsigned char data) { 
+
+void sendData(unsigned char data, char mouse) { 
  char i; 
  unsigned char parity = 1; 
- dataline_tris = 0; // Drive data pin 
- clk_tris = 0; // Drive clock pin. 
- clk = 0; // Drive clock pin low. 
- delay(HUNDRD_USEC); // Wait a bit, 100 us. 
- dataline = 0; // Drive data pin low. 
- delay(TEN_USEC); // Wait 10 us. 
- clk_tris = 1; // Stop driving clock. 
- 
- for(i=0; i < 8; i++) {
-	while(clk) ; // Wait until clock is low. 
- 	dataline = data & 0x1; // Send bit. 
- 	parity += data & 0x1; // Calculate parity. 
- 	data = data >> 1; // Shift data. 
- 	while(!clk) ; // Wait until clock is high. 
- } 
-
- while(clk) ; // Wait until clock is low. 
- dataline = parity & 0x1; // Send parity 
- while(!clk) ; // Wait until clock is high. 
- while(clk) ; // Wait until clock is low. 
- dataline = 1; // Send stop bit. 
- while(!clk) ; // Wait until clock goes high 
- dataline_tris = 1; // Stop driving data pin. 
- while(dataline); // Wait until acknowledgement bit. 
- while(clk); // Wait until clock goes low. 
- while(!clk || !dataline); // Wait until mouse releases clk and dataline. 
- // (both go high.) 
+ if (mouse){
+	 dataline_tris2 = 0; // Drive data pin 
+	 clk_tris2 = 0; // Drive clock pin. 
+	 clk2 = 0; // Drive clock pin low. 
+	 delay(HUNDRD_USEC); // Wait a bit, 100 us. 
+	 dataline2 = 0; // Drive data pin low. 
+	 delay(TEN_USEC); // Wait 10 us. 
+	 clk_tris2 = 1; // Stop driving clock. 
+	 
+	 for(i=0; i < 8; i++) {
+		while(clk2) ; // Wait until clock is low. 
+	 	dataline2 = data & 0x1; // Send bit. 
+	 	parity += data & 0x1; // Calculate parity. 
+	 	data = data >> 1; // Shift data. 
+	 	while(!clk2) ; // Wait until clock is high. 
+	 } 
+	
+	 while(clk2) ; // Wait until clock is low. 
+	 dataline2 = parity & 0x1; // Send parity 
+	 while(!clk2) ; // Wait until clock is high. 
+	 while(clk2) ; // Wait until clock is low. 
+	 dataline2 = 1; // Send stop bit. 
+	 while(!clk2) ; // Wait until clock goes high 
+	 dataline_tris2 = 1; // Stop driving data pin. 
+	 while(dataline2); // Wait until acknowledgement bit. 
+	 while(clk2); // Wait until clock goes low. 
+	 while(!clk2 || !dataline2); // Wait until mouse releases clk and dataline. 
+	 // (both go high.) 
+ } else {
+	 dataline_tris1 = 0; // Drive data pin 
+	 clk_tris1 = 0; // Drive clock pin. 
+	 clk1 = 0; // Drive clock pin low. 
+	 delay(HUNDRD_USEC); // Wait a bit, 100 us. 
+	 dataline1 = 0; // Drive data pin low. 
+	 delay(TEN_USEC); // Wait 10 us. 
+	 clk_tris1 = 1; // Stop driving clock. 
+	 
+	 for(i=0; i < 8; i++) {
+		while(clk1) ; // Wait until clock is low. 
+	 	dataline1 = data & 0x1; // Send bit. 
+	 	parity += data & 0x1; // Calculate parity. 
+	 	data = data >> 1; // Shift data. 
+	 	while(!clk1) ; // Wait until clock is high. 
+	 } 
+	
+	 while(clk1) ; // Wait until clock is low. 
+	 dataline1 = parity & 0x1; // Send parity 
+	 while(!clk1) ; // Wait until clock is high. 
+	 while(clk1) ; // Wait until clock is low. 
+	 dataline1 = 1; // Send stop bit. 
+	 while(!clk1) ; // Wait until clock goes high 
+	 dataline_tris1 = 1; // Stop driving data pin. 
+	 while(dataline1); // Wait until acknowledgement bit. 
+	 while(clk1); // Wait until clock goes low. 
+	 while(!clk1 || !dataline1); // Wait until mouse releases clk and dataline
+ }
 }
 
-unsigned char recvData(void) { 
+
+unsigned char recvData(char mouse) { 
  unsigned char data = 0x0; 
  unsigned char parity; 
  char i; 
- // Start bit 
- while(clk); // Wait until clock is low. 
- while(!clk) ; // Wait until clock is high. 
- // 8 bits of data 
- for(i=0; i < 8; i++) { 
-  while(clk); // Wait until clock line is low. 
- data = data >> 1; // Shift buffer. 
- data += dataline * 0x80; // Read next bit into buffer. 
- parity += data & 0x1; // Update parity. 
- while(!clk); // Wait until clock is high. 
- } 
- // Parity bit. Calculated but not checked. Just compare 
- // to value on dataline and handle accordingly. 
- while(clk) ; // Wait until clock is low. 
- while(!clk) ; // Wait until clock is high. 
- // Stop bit. Not checked. 
- while(clk) ; // Wait until clock is low. 
- while(!clk) ; // Wait until clock is high. 
+ if (mouse) { 
+	// Start bit 
+	 while(clk2); // Wait until clock is low. 
+	 while(!clk2) ; // Wait until clock is high. 
+	 // 8 bits of data 
+	 for(i=0; i < 8; i++) { 
+	  while(clk2); // Wait until clock line is low. 
+	 data = data >> 1; // Shift buffer. 
+	 data += dataline2 * 0x80; // Read next bit into buffer. 
+	 parity += data & 0x1; // Update parity. 
+	 while(!clk2); // Wait until clock is high. 
+	 } 
+	 // Parity bit. Calculated but not checked. Just compare 
+	 // to value on dataline and handle accordingly. 
+	 while(clk2) ; // Wait until clock is low. 
+	 while(!clk2) ; // Wait until clock is high. 
+	 // Stop bit. Not checked. 
+	 while(clk2) ; // Wait until clock is low. 
+	 while(!clk2) ; // Wait until clock is high. 
+ } else {
+	// Start bit 
+	 while(clk1); // Wait until clock is low. 
+	 while(!clk1) ; // Wait until clock is high. 
+	 // 8 bits of data 
+	 for(i=0; i < 8; i++) { 
+	  while(clk1); // Wait until clock line is low. 
+	 data = data >> 1; // Shift buffer. 
+	 data += dataline1 * 0x80; // Read next bit into buffer. 
+	 parity += data & 0x1; // Update parity. 
+	 while(!clk1); // Wait until clock is high. 
+	 } 
+	 // Parity bit. Calculated but not checked. Just compare 
+	 // to value on dataline and handle accordingly. 
+	 while(clk1) ; // Wait until clock is low. 
+	 while(!clk1) ; // Wait until clock is high. 
+	 // Stop bit. Not checked. 
+	 while(clk1) ; // Wait until clock is low. 
+	 while(!clk1) ; // Wait until clock is high. 
+ }
  return data; 
 } 
 
-void ps2setup(void) { 
- clk_odc = 1; // enable open drain output on clock pin
- dataline_odc = 1; //  enable open drain output on data pin
- sendData(MS_RESET); // Reset mouse. 
 
- while(recvData() != MS_SUCCESS); // Wait for self-test success. 
- while(recvData() != MS_DEVICE_ID); // Wait for mouse device id to be sent. 
+void ps2setup(void) {
+ clk_odc1 = 1; // enable open drain output on clock pin
+ dataline_odc1 = 1; //  enable open drain output on data pin
+ 
+ clk_odc2 = 1; // enable open drain output on clock pin
+ dataline_odc2 = 1; //  enable open drain output on data pin
+ 
+ sendData(MS_RESET, 0); // Reset mouse. 
+ while(recvData(0) != MS_SUCCESS); // Wait for self-test success. 
+ while(recvData(0) != MS_DEVICE_ID); // Wait for mouse device id to be sent. 
 
+ sendData(MS_RESET, 1); // Reset mouse. 
+ while(recvData(1) != MS_SUCCESS); // Wait for self-test success. 
+ while(recvData(1) != MS_DEVICE_ID); // Wait for mouse device id to be sent. 
 }
+
 
 void delay (unsigned int usec) {
  unsigned int start, stop;
