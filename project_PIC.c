@@ -62,7 +62,7 @@ void updateBall(void);        // update ball position and velocity
 #define DEFYVEL_BALL 1
 #define UPDATE_PERIOD 800 //30ms refresh period, 20MHz Pb_clk, 1:256 prescaler
 
-#define HALFPADWIDTH 25 //pixel width/2
+#define PADWIDTH 50 //pixel width/2
 #define PADTHICKNESS 10
 #define BALLRADIUS 10
 
@@ -105,23 +105,34 @@ void updateBall(void){
  	ballXpos=ballXpos+ballXvel;
  	ballYpos=ballYpos+ballYvel;
  	
-	if (ballXpos>640-BALLRADIUS) {
- 		ballXpos=640-BALLRADIUS;
- 		ballXvel=-1*ballXvel;
- 	}
-
- 	if (ballXpos<BALLRADIUS) {
- 		if (ballYpos<pad1Ypos+HALFPADWIDTH && ballYpos>pad1Ypos-HALFPADWIDTH) {
+	if (ballXpos>640-BALLRADIUS-PADTHICKNESS) {
+ 		if (ballYpos<pad2Ypos+PADWIDTH && ballYpos>pad2Ypos) {
  			// means reflected with paddle
- 			ballXpos=BALLRADIUS;
+	 		ballXpos=640-BALLRADIUS-PADTHICKNESS;
+	 		ballXvel=-1*ballXvel;
+ 		} else { //reset ball with default values
+ 			// if missed paddle, incement other player's score, reset ball
+ 			score1++; 
+ 			ballXpos = DEFXPOS_BALL;
+ 			ballYpos = DEFYPOS_BALL;
+ 			ballXvel = DEFXVEL_BALL;
+ 			ballYvel = DEFYVEL_BALL;
+ 		}
+ 	}
+ 	
+
+ 	if (ballXpos<BALLRADIUS+PADTHICKNESS) {
+ 		if (ballYpos<pad1Ypos+PADWIDTH && ballYpos>pad1Ypos) {
+ 			// means reflected with paddle
+ 			ballXpos=BALLRADIUS+PADTHICKNESS;
  			ballXvel=-1*ballXvel;
  		} else { //reset ball with default values
  			// if missed paddle, incement other player's score, reset ball
  			score2++; 
- 			short ballXpos = DEFXPOS_BALL;
- 			short ballYpos = DEFYPOS_BALL;
- 			short ballXvel = DEFXVEL_BALL;
- 			short ballYvel = DEFYVEL_BALL;
+ 			ballXpos = DEFXPOS_BALL;
+ 			ballYpos = DEFYPOS_BALL;
+ 			ballXvel = DEFXVEL_BALL;
+ 			ballYvel = DEFYVEL_BALL;
  		}
  	}
 	
@@ -221,13 +232,13 @@ void readMouse(char mouse){
 	 	pad2Ypos -= (COORINFO_YSIGN & coorinfo) ? 
  		0xFFFFFFF0 | recvData(mouse) : recvData(mouse);
 		//keep within screen
-		if (pad2Ypos>480-2*HALFPADWIDTH) pad2Ypos=480-2*HALFPADWIDTH;
+		if (pad2Ypos>480-PADWIDTH) pad2Ypos=480-PADWIDTH;
 		if (pad2Ypos<0) pad2Ypos=0;
 	} else {
 		pad1Ypos -= (COORINFO_YSIGN & coorinfo) ? 
  		0xFFFFFFF0 | recvData(mouse) : recvData(mouse);
 		//keep within screen
-		if (pad1Ypos>480-2*HALFPADWIDTH) pad1Ypos=480-2*HALFPADWIDTH;
+		if (pad1Ypos>480-PADWIDTH) pad1Ypos=480-PADWIDTH;
 		if (pad1Ypos<0) pad1Ypos=0;
 	}
 }
