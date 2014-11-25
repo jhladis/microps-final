@@ -32,7 +32,8 @@ module project_FPGA(input  logic       clk,
                     .r_out(r_out), .g_out(g_out), .b_out(b_out));
     
     videoGen videoGen(.paddle1(paddle1), .paddle2(paddle2), .ballx(ballx), .bally(bally),
-                      .x(x), .y(y), .r_int(r_int), .g_int(g_int), .b_int(b_int));
+                      .score1(score1), .score2(score2),.x(x), .y(y),
+                      .r_int(r_int), .g_int(g_int), .b_int(b_int));
     
     spiSlave spiSlave1(.sck(sck_a), .sdo(sdo_a), .sdi(sdi_a), .reset(spiRst), .vsync(vsync),
                        .d(send_a), .q(received_a));
@@ -107,11 +108,16 @@ module videoGen#(parameter SCREENWIDTH = 10'd640,
                            PADDLEHEIGHT = 10'd50,
                            BALLSIZE = 10'd100,
                            PADDLECOLOR = 24'hFFFFFF,
-                           BALLCOLOR = 24'h6060FF,
-                           BGCOLOR = 24'h000000)
+                           BALLCOLOR = 24'h6060FF)
                 (input  logic [9:0] paddle1, paddle2, ballx, bally, x, y,
+                 input  logic [5:0] score1, score2,
                  output logic [7:0] r_int, g_int, b_int);
 
+    logic [7:0] r_head, g_head, b_head;
+    
+    headerDisp headerDisp(.x(x), .y(y), .score1(score1), .score2(score2),
+                          .r(r_head), .g(g_head), .b(b_head));
+    
     logic in_paddle1, in_paddle2, in_ball;
     logic [9:0] dist2ballx, dist2bally;
     logic [19:0] dist2ballr;
@@ -130,7 +136,64 @@ module videoGen#(parameter SCREENWIDTH = 10'd640,
         else if (in_paddle1 | in_paddle2)
             {r_int, g_int, b_int} = PADDLECOLOR;
         else
-            {r_int, g_int, b_int} = BGCOLOR;
+            {r_int, g_int, b_int} = {r_head, g_head, b_head};
+    end
+endmodule
+
+// module to display header at top of screen, includes score
+module headerDisp#(parameter HEADSIZE = 10'd10,
+                             DIGWIDTH = 10'd6,
+                             DIGHEIGHT = 10'd8,
+                             SCOREWIDTH = 10'd12,
+                             SCREENWIDTH = 10'd640,
+                             BGCOLOR = 24'h000000,
+                             DIGCOLOR = 24'hFFFFFF)
+                  (input  logic [9:0] x, y,
+                   input  logic [5:0] score1, score2,
+                   output logic [7:0] r, g, b);
+    
+    logic [3:0] digit_1a, digit_1b, digit_2a, digit_2b;
+    logic       pixel;
+    logic [5:0] digits [79:0];
+    logic [5:0] line;
+    
+    initial $readmemb("digits.txt", digits);
+    
+    always_comb begin
+        digit_1a = score1 / 6'd10;
+        digit_1b = score1 % 6'd10;
+        digit_2a = score2 / 6'd10;
+        digit_2b = score2 % 6'd10;
+//        digit_1a = 4'h0;
+//        digit_1b = 4'h1;
+//        digit_2a = 4'h2;
+//        digit_2b = 4'h3;
+    
+        if (y < DIGHEIGHT) begin
+            if (x < DIGWIDTH) begin
+                line = digits[{digit_1a, y[2:0]}];
+                pixel = line[3'd5 - x];
+            end else if (x >= DIGWIDTH & x < SCOREWIDTH) begin
+                line = digits[{digit_1b, y[2:0]}];
+                pixel = line[3'd5 - (x-DIGWIDTH)];
+            end else if (x >= SCREENWIDTH-SCOREWIDTH & x < SCREENWIDTH-DIGWIDTH) begin
+                line = digits [{digit_2a, y[2:0]}];
+                pixel = line[3'd5 - (x-(SCREENWIDTH-SCOREWIDTH))];
+            end else if (x >= SCREENWIDTH-DIGWIDTH) begin
+                line = digits [{digit_2b, y[2:0]}];
+                pixel = line[3'd5 - (x-(SCREENWIDTH-DIGWIDTH))];
+            end else begin
+                line = '0;
+                pixel = 0;
+            end
+        end else if (y == HEADSIZE) begin
+            line = '0;
+            pixel = 1;
+        end else begin
+            line = '0;
+            pixel = 0;
+        end
+        {r, g, b} = pixel ? DIGCOLOR : BGCOLOR;
     end
 endmodule
 
