@@ -7,6 +7,7 @@
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #include <P32xxxx.h>
+#include <stdlib.h>
 
 #define fpga_reset PORTFbits.RF0
 #define fpga_reset_tris TRISFbits.TRISF0
@@ -63,31 +64,32 @@ void updateBall(void);        // update ball position and velocity
 #define YHIGH 480
 #define XLOW  0
 #define XHIGH 640
-
-#define DEFXPOS_BALL 320
-#define DEFYPOS_BALL 320
-#define DEFXVELDIR_BALL 1 //1 or -1
-#define DEFYVELDIR_BALL 1
-#define DEFXVELMAG_BALL 1000 //pixels per second
-#define DEFYVELMAG_BALL 1000
-#define UPDATE_PERIODX 1000000/DEFXVELMAG_BALL/12.8 //times 12.8 us period
-#define UPDATE_PERIODY 1000000/DEFYVELMAG_BALL/12.8
+#define OFFSET 50
+#define DEFXPOS_BALL (rand()%(XHIGH-OFFSET)+XLOW+OFFSET)
+#define DEFYPOS_BALL (rand()%YHIGH+YLOW)
+#define DEFXVELDIR_BALL (rand()%2*2-1) //1 or -1
+#define DEFYVELDIR_BALL (rand()%2*2-1)
+#define DEFXVELMAG_BALL (rand()%800+500) //200 to 800pixels per second
+#define DEFYVELMAG_BALL (rand()%800+500)
+#define UPDATE_PERIODX (1000000/DEFXVELMAG_BALL/12.8) //times 12.8 us period
+#define UPDATE_PERIODY (1000000/DEFYVELMAG_BALL/12.8)
+//is this causing unecessary float operations???
 
 #define PADWIDTH 50
 #define PADTHICKNESS 10
 #define BALLRADIUS 10
 
 // global variables
-long ballXpos = DEFXPOS_BALL; // 10 bits for each position
-long ballYpos = DEFYPOS_BALL;
+long ballXpos, ballYpos; // 10 bits for each position
 long pad1Ypos = 240; // start at midpoint of screen
 long pad2Ypos = 240;
-signed short ballXvel = DEFXVELDIR_BALL; // initialize to default
-signed short ballYvel = DEFYVELDIR_BALL;
+signed short ballXvel, ballYvel;
 
 short soundSel = 0; // up to 12 bit sound selecor
 short score1 = 0; // 6 bits for score
 short score2 = 0; 
+
+#define WINSCORE 10 //max of 63 because only 6 bits
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -98,10 +100,16 @@ ps2setup();
 initSPI();
 initTimers();
 
+ballXpos = DEFXPOS_BALL;// initialize to default
+ballYpos = DEFYPOS_BALL;
+ballXvel = DEFXVELDIR_BALL;
+ballYvel = DEFYVELDIR_BALL;
+
  while(1) {
 	readMouse(0);
 	readMouse(1);
-	updateBall(); // update ball position
+	if (score1<WINSCORE && score2<WINSCORE)
+		updateBall(); // update ball position until end of game
 	sendtoFPGA();
  } 
 }
@@ -186,6 +194,7 @@ void initTimers(void) {
 // bit 7: TGATE=0: disable gated accumulation
 // bit 6: unused
 // bit 5-4: TCKPS=11: 1:256 prescaler, 0.05us*256=12.8us
+// bit 6-4: TCKPS=111: 1:256 prescaler for timer 2
 // bit 3: unused
 // bit 2: don't care in internal clock mode
 // bit 1: TCS=0: use internal peripheral clock
