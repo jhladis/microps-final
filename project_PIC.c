@@ -56,13 +56,24 @@ void playSound(int soundSel); // tell FPGA to play a sound
 void updateBall(void);        // update ball position and velocity
 
 // game parameters
+
+// bounce space dimenions
+// screen origin defined as upper right
+#define YLOW  10
+#define YHIGH 480
+#define XLOW  0
+#define XHIGH 640
+
 #define DEFXPOS_BALL 320
 #define DEFYPOS_BALL 320
-#define DEFXVEL_BALL 1
-#define DEFYVEL_BALL 1
-#define UPDATE_PERIOD 800 //30ms refresh period, 20MHz Pb_clk, 1:256 prescaler
+#define DEFXVELDIR_BALL 1 //1 or -1
+#define DEFYVELDIR_BALL 1
+#define DEFXVELMAG_BALL 1000 //pixels per second
+#define DEFYVELMAG_BALL 1000
+#define UPDATE_PERIODX 1000000/DEFXVELMAG_BALL/12.8 //times 12.8 us period
+#define UPDATE_PERIODY 1000000/DEFYVELMAG_BALL/12.8
 
-#define PADWIDTH 50 //pixel width/2
+#define PADWIDTH 50
 #define PADTHICKNESS 10
 #define BALLRADIUS 10
 
@@ -71,8 +82,8 @@ long ballXpos = DEFXPOS_BALL; // 10 bits for each position
 long ballYpos = DEFYPOS_BALL;
 long pad1Ypos = 240; // start at midpoint of screen
 long pad2Ypos = 240;
-signed short ballXvel = DEFXVEL_BALL; // initialize to default
-signed short ballYvel = DEFYVEL_BALL;
+signed short ballXvel = DEFXVELDIR_BALL; // initialize to default
+signed short ballYvel = DEFYVELDIR_BALL;
 
 short soundSel = 0; // up to 12 bit sound selecor
 short score1 = 0; // 6 bits for score
@@ -90,58 +101,59 @@ initTimers();
  while(1) {
 	readMouse(0);
 	readMouse(1);
-
-	if (TMR1>=UPDATE_PERIOD){
-    	TMR1=0; // reset timer
-		updateBall(); // update ball position
-	}
-
+	updateBall(); // update ball position
 	sendtoFPGA();
  } 
 }
 
 
 void updateBall(void){
- 	ballXpos=ballXpos+ballXvel;
- 	ballYpos=ballYpos+ballYvel;
- 	
-	if (ballXpos>640-BALLRADIUS-PADTHICKNESS) {
+	if (TMR1>=UPDATE_PERIODX){
+    	TMR1=0; // reset timer
+		ballXpos+=ballXvel; // update ball position
+	}
+	if (TMR2>=UPDATE_PERIODY){
+    	TMR2=0; // reset timer
+		ballYpos+=ballYvel; // update ball position
+	}
+
+	if (ballXpos>XHIGH-BALLRADIUS-PADTHICKNESS) {
  		if (ballYpos<pad2Ypos+PADWIDTH && ballYpos>pad2Ypos) {
  			// means reflected with paddle
-	 		ballXpos=640-BALLRADIUS-PADTHICKNESS;
+	 		ballXpos=XHIGH-BALLRADIUS-PADTHICKNESS;
 	 		ballXvel=-1*ballXvel;
  		} else { //reset ball with default values
  			// if missed paddle, incement other player's score, reset ball
  			score1++; 
  			ballXpos = DEFXPOS_BALL;
  			ballYpos = DEFYPOS_BALL;
- 			ballXvel = DEFXVEL_BALL;
- 			ballYvel = DEFYVEL_BALL;
+ 			ballXvel = DEFXVELDIR_BALL;
+ 			ballYvel = DEFYVELDIR_BALL;
  		}
  	}
  	
 
- 	if (ballXpos<BALLRADIUS+PADTHICKNESS) {
+ 	if (ballXpos<XLOW+BALLRADIUS+PADTHICKNESS) {
  		if (ballYpos<pad1Ypos+PADWIDTH && ballYpos>pad1Ypos) {
  			// means reflected with paddle
- 			ballXpos=BALLRADIUS+PADTHICKNESS;
+ 			ballXpos=XLOW+BALLRADIUS+PADTHICKNESS;
  			ballXvel=-1*ballXvel;
  		} else { //reset ball with default values
  			// if missed paddle, incement other player's score, reset ball
  			score2++; 
  			ballXpos = DEFXPOS_BALL;
  			ballYpos = DEFYPOS_BALL;
- 			ballXvel = DEFXVEL_BALL;
- 			ballYvel = DEFYVEL_BALL;
+ 			ballXvel = DEFXVELDIR_BALL;
+ 			ballYvel = DEFYVELDIR_BALL;
  		}
  	}
 	
- 	if (ballYpos>480-BALLRADIUS) {
- 		ballYpos=480-BALLRADIUS;
+ 	if (ballYpos>YHIGH-BALLRADIUS) {
+ 		ballYpos=YHIGH-BALLRADIUS;
  		ballYvel=-1*ballYvel;
  	}
- 	if (ballYpos<BALLRADIUS) {
- 		ballYpos=BALLRADIUS;
+ 	if (ballYpos<YLOW+BALLRADIUS) {
+ 		ballYpos=YLOW+BALLRADIUS;
  		ballYvel=-1*ballYvel;
  	}
 }
@@ -164,7 +176,7 @@ void sendtoFPGA(void){
 
 void initTimers(void) {
 // Peripheral clock at 20MHz
-// T1CON
+// T1CON and T2CON
 // bit 15: ON=1: enable timer
 // bit 14: FRZ=0: keep running in exception mode
 // bit 13: SIDL = 0: keep running in idle mode
@@ -179,6 +191,7 @@ void initTimers(void) {
 // bit 1: TCS=0: use internal peripheral clock
 // bit 0: unused
 T1CON = 0b1001000000110000;
+T2CON = 0b1001000001110000;
 }
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -232,14 +245,14 @@ void readMouse(char mouse){
 	 	pad2Ypos -= (COORINFO_YSIGN & coorinfo) ? 
  		0xFFFFFFF0 | recvData(mouse) : recvData(mouse);
 		//keep within screen
-		if (pad2Ypos>480-PADWIDTH) pad2Ypos=480-PADWIDTH;
-		if (pad2Ypos<0) pad2Ypos=0;
+		if (pad2Ypos>YHIGH-PADWIDTH) pad2Ypos=YHIGH-PADWIDTH;
+		if (pad2Ypos<YLOW) pad2Ypos=YLOW;
 	} else {
 		pad1Ypos -= (COORINFO_YSIGN & coorinfo) ? 
  		0xFFFFFFF0 | recvData(mouse) : recvData(mouse);
 		//keep within screen
-		if (pad1Ypos>480-PADWIDTH) pad1Ypos=480-PADWIDTH;
-		if (pad1Ypos<0) pad1Ypos=0;
+		if (pad1Ypos>YHIGH-PADWIDTH) pad1Ypos=YHIGH-PADWIDTH;
+		if (pad1Ypos<YLOW) pad1Ypos=YLOW;
 	}
 }
 
