@@ -18,6 +18,7 @@ module project_FPGA(input  logic       clk,
                     output logic       audio_out);             // to audio amplifier
 
     logic [9:0] paddle1, paddle2, ballx, bally;
+    logic [9:0] paddle1TEST, paddle2TEST, ballxTEST, ballyTEST;
     logic [9:0] x, y;
     logic [5:0] score1, score2;
     logic [31:0] send_a, send_b, received_a, received_b;
@@ -26,11 +27,16 @@ module project_FPGA(input  logic       clk,
     
     assign led = paddle1[9:2];
     
+    assign paddle1TEST = 10'd100;
+    assign paddle2TEST = 10'd100;
+    assign ballxTEST = 10'd100;
+    assign ballyTEST = 10'd100;
+    
     vgaCont vgaCont(.clk(clk), .r_int(r_int), .g_int(g_int), .b_int(b_int),
                     .vgaclk(vgaclk), .hsync(hsync), .vsync(vsync), .sync_b(sync_b), .x(x), .y(y),
                     .r_out(r_out), .g_out(g_out), .b_out(b_out));
     
-    videoGen videoGen(.paddle1(paddle1), .paddle2(paddle2), .ballx(ballx), .bally(bally),
+    videoGen videoGen(.paddle1(paddle1TEST), .paddle2(paddle2TEST), .ballx(ballxTEST), .bally(ballyTEST),
                       .score1(score1), .score2(score2),.x(x), .y(y),
                       .r_int(r_int), .g_int(g_int), .b_int(b_int));
     
@@ -136,11 +142,10 @@ module videoGen#(parameter SCREENWIDTH = 10'd640,
 endmodule
 
 // module to display header at top of screen, includes score
-module headerDisp#(parameter HEADSIZE = 10'd10,
-                             DIGWIDTH = 10'd6,
-                             DIGHEIGHT = 10'd8,
-                             SCOREWIDTH = 10'd12,
+module headerDisp#(parameter HEADHEIGHT = 10'd10,
+                             CHARHEIGHT = 10'd8,
                              SCREENWIDTH = 10'd640,
+                             LABELWIDTH = 10'd60,
                              BGCOLOR = 24'h000000,
                              DIGCOLOR = 24'hFFFFFF)
                   (input  logic [9:0] x, y,
@@ -148,40 +153,42 @@ module headerDisp#(parameter HEADSIZE = 10'd10,
                    output logic [7:0] r, g, b);
     
     logic [3:0] digit_1a, digit_1b, digit_2a, digit_2b;
-    logic       pixel;
-    logic [5:0] digits [79:0];
+    logic [5:0] chars [1023:0];
+    logic [7:0] str [9:0];
     logic [5:0] line;
+    logic       pixel;
     
-    initial $readmemb("digits.txt", digits);
+    initial $readmemb("charrom.txt", chars);
+    initial $readmemh("str.txt", str);
     
     always_comb begin
-        digit_1a = score1 / 6'd10;
-        digit_1b = score1 % 6'd10;
-        digit_2a = score2 / 6'd10;
-        digit_2b = score2 % 6'd10;
-//        digit_1a = 4'h0;
-//        digit_1b = 4'h1;
-//        digit_2a = 4'h2;
-//        digit_2b = 4'h3;
+//        digit_1a = score1 / 6'd10;
+//        digit_1b = score1 % 6'd10;
+//        digit_2a = score2 / 6'd10;
+//        digit_2b = score2 % 6'd10;
+        digit_1a = 4'd0;
+        digit_1b = 4'd1;
+        digit_2a = 4'd2;
+        digit_2b = 4'd3;
     
-        if (y < DIGHEIGHT) begin
-            if (x < DIGWIDTH) begin
-                line = digits[{digit_1a, y[2:0]}];
-                pixel = line[3'd5 - x];
-            end else if (x >= DIGWIDTH & x < SCOREWIDTH) begin
-                line = digits[{digit_1b, y[2:0]}];
-                pixel = line[3'd5 - (x-DIGWIDTH)];
-            end else if (x >= SCREENWIDTH-SCOREWIDTH & x < SCREENWIDTH-DIGWIDTH) begin
-                line = digits [{digit_2a, y[2:0]}];
-                pixel = line[3'd5 - (x-(SCREENWIDTH-SCOREWIDTH))];
-            end else if (x >= SCREENWIDTH-DIGWIDTH) begin
-                line = digits [{digit_2b, y[2:0]}];
-                pixel = line[3'd5 - (x-(SCREENWIDTH-DIGWIDTH))];
+        if (y < CHARHEIGHT) begin
+            if (x < LABELWIDTH) begin
+                str[6] = 8'h31;
+                str[8] = digit_1a + 8'h30;
+                str[9] = digit_1b + 8'h30;
+                line = chars[{str[x/10'd6], y[2:0]}];
+                pixel = line[3'd5 - x % 10'd6];
+            end else if (x >= SCREENWIDTH - LABELWIDTH) begin
+                str[6] = 8'h32;
+                str[8] = digit_2a + 8'h30;
+                str[9] = digit_2b + 8'h30;
+                line = chars[{str[(x-(SCREENWIDTH-LABELWIDTH))/10'd6], y[2:0]}];
+                pixel = line[3'd5 - (x - (SCREENWIDTH-LABELWIDTH)) % 10'd6];
             end else begin
                 line = '0;
                 pixel = 0;
             end
-        end else if (y == HEADSIZE) begin
+        end else if (y == HEADHEIGHT) begin
             line = '0;
             pixel = 1;
         end else begin
@@ -243,19 +250,6 @@ module dataDecode(input  [31:0] received_a, received_b,
     end
 endmodule
 
-//module pwm#(parameter WIDTH = 16)
-//           (input  logic             clk,
-//            input  logic [WIDTH-1:0] duty_cycle,
-//            output logic             audio_out);
-//    
-//    logic [WIDTH-1:0] count;
-//    
-//    always_ff@(posedge clk)
-//        count <= count + 1'b1;
-//    
-//    assign audio_out = count > duty_cycle;
-//endmodule
-//
 module audio#(parameter PERSIZE = 24,
               parameter DURSIZE = 8)
              (input  logic        pclk,
