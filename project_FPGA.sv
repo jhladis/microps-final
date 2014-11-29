@@ -101,7 +101,7 @@ module videoGen#(parameter SCREENWIDTH = 10'd640,
                            SCREENHEIGHT = 10'd480,
                            PADDLEWIDTH = 10'd10,
                            PADDLEHEIGHT = 10'd50,
-                           BALLSIZE = 10'd100,
+                           BALLSIZE = 10'd95,
                            PADDLECOLOR = 24'hFFFFFF,
                            BALLCOLOR = 24'h6060FF)
                 (input  logic [9:0] paddle1, paddle2, ballx, bally, x, y,
