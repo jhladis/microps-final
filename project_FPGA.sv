@@ -2,7 +2,7 @@
   Robert Gambee and Jirka Hladis
   Fall 2014
   
-  System Verilog code for Pong game
+  SystemVerilog code for Pong game
 */
 
 module project_FPGA(input  logic       clk,
@@ -14,6 +14,7 @@ module project_FPGA(input  logic       clk,
                     input  logic       sck_a, sck_b, sdo_a, sdo_b, // spi clock and output from pic
                     output logic       sdi_a, sdi_b,             // spi input to pic
                     output logic [7:0] led,
+                    
                     output logic       audio_out);             // to audio amplifier
 
     logic [9:0] paddle1, paddle2, ballx, bally;
@@ -21,8 +22,6 @@ module project_FPGA(input  logic       clk,
     logic [5:0] score1, score2;
     logic [31:0] send_a, send_b, received_a, received_b;
     logic [7:0] r_int, g_int, b_int;
-//    parameter COUNTWIDTH = 19;              // width of count signal (for audio)
-//    logic [COUNTWIDTH-1:0] sound_cnt;
     logic [11:0] sound_sel;
     
     assign led = paddle1[9:2];
@@ -43,11 +42,8 @@ module project_FPGA(input  logic       clk,
     dataDecode dataDecode(.send_a(send_a), .send_b(send_b), .received_a(received_a), .received_b(received_b),
                           .ballx(ballx), .bally(bally), .score1(score1), .score2(score2),
                           .paddle1(paddle1), .paddle2(paddle2), .sound_sel(sound_sel));
-    
-//    counter #(.WIDTH(COUNTWIDTH)) counter(.clk(clk), .count(sound_cnt));
-//    
-//    sound #(.WIDTH(COUNTWIDTH)) sound(.count(sound_cnt), .sound_sel(sound_sel),
-//                                      .audio_out(audio_out));
+
+    audio audio(.pclk(clk), .sound_sel(sound_sel), .audio_out(audio_out));
 endmodule
 
 
@@ -69,11 +65,10 @@ module vgaCont#(parameter HMAX   = 10'd800,
     logic       valid;
     
     // use PLL to create 25.175 MHz VGA clock
-    pll pll_inst (.areset ( areset_sig ),
-                  .inclk0 ( clk ),
-                  .c0 ( vgaclk ),
-                  .locked ( locked_sig )
-                 );
+    vgaPLL vgaPLL_inst (.areset ( areset_sig ),
+                        .inclk0 ( clk ),
+                        .c0 ( vgaclk ),
+                        .locked ( locked_sig ));
     
     // counters for horizontal and vertical positions
     always @(posedge vgaclk) begin
@@ -94,7 +89,7 @@ module vgaCont#(parameter HMAX   = 10'd800,
     // determine x and y positions
     assign x = hcnt - HSTART;
     assign y = vcnt - VSTART;
-      
+    
     // force outputs to black when outside the legal display area
     assign valid = (hcnt >= HSTART & hcnt < HSTART+WIDTH &
                     vcnt >= VSTART & vcnt < VSTART+HEIGHT);
@@ -248,30 +243,56 @@ module dataDecode(input  [31:0] received_a, received_b,
     end
 endmodule
 
-// module that outputs a count signal of specified width
-//module counter #(parameter WIDTH = 19)         // signal width of internal counter
-//                (input  logic clk,
-//                 output logic [WIDTH-1:0] count);
+//module pwm#(parameter WIDTH = 16)
+//           (input  logic             clk,
+//            input  logic [WIDTH-1:0] duty_cycle,
+//            output logic             audio_out);
 //    
-//    always @(posedge clk)
+//    logic [WIDTH-1:0] count;
+//    
+//    always_ff@(posedge clk)
 //        count <= count + 1'b1;
 //    
+//    assign audio_out = count > duty_cycle;
 //endmodule
-
-// module that selects which bit of a count signal drives
-// output to a speaker
-//module sound #(parameter WIDTH = 19)
-//              (input  logic [WIDTH-1:0] count,
-//               input  logic [11:0]      sound_sel,
-//               output logic             audio_out);
-//    
-//    always_comb begin
-//        case (sound_sel)
-//            12'd1   : audio_out = count[WIDTH-1];
-//            4'b0100 : audio_out = count[WIDTH-2];
-//            4'b0010 : audio_out = count[WIDTH-3];
-//            4'b0001 : audio_out = count[WIDTH-4];
-//            default : audio_out = 0;
-//        endcase
-//    end
-//endmodule
+//
+module audio#(parameter PERSIZE = 24,
+              parameter DURSIZE = 8)
+             (input  logic        pclk,
+              input  logic [11:0] sound_sel,
+              output logic        audio_out);
+    
+    logic [(PERSIZE+DURSIZE)-1:0] notes [15:0];
+    logic [(PERSIZE+DURSIZE)-1:0] next_note;
+    logic [PERSIZE-1:0] period, pcount;
+    logic [DURSIZE-1:0] duration;
+    logic [DURSIZE+3:0] dcount;
+    
+    initial $readmemh("notes.txt", notes);
+    
+    // 2 kHz clock for note durations
+    audioPLL audioPLL_inst (.areset ( areset_sig ),
+                            .inclk0 ( pclk ),
+                            .c0 ( dclk ),
+                            .locked ( locked_sig ));
+    
+    assign next_note = notes[sound_sel[6:0]];
+    
+    always_ff@(posedge dclk) begin
+        if (dcount >= {duration, 4'b0}) begin
+            dcount <= '0;
+            {period, duration} <= next_note;
+        end else
+            dcount <= dcount + 1'b1;
+    end
+    
+    always_ff@(posedge pclk) begin
+        if (~|period)
+            audio_out <= 0;
+        else if (pcount >= period) begin
+            pcount <= '0;
+            audio_out <= ~audio_out;
+        end else
+            pcount <= pcount + 1'b1;
+    end
+endmodule
