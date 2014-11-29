@@ -64,16 +64,16 @@ void updateBall(void);        // update ball position and velocity
 #define YHIGH 480
 #define XLOW  0
 #define XHIGH 640
-#define OFFSET 50
-#define DEFXPOS_BALL (rand()%(XHIGH-OFFSET)+XLOW+OFFSET)
-#define DEFYPOS_BALL (rand()%YHIGH+YLOW)
-#define DEFXVELDIR_BALL (rand()%2*2-1) //1 or -1
-#define DEFYVELDIR_BALL (rand()%2*2-1)
-#define DEFXVELMAG_BALL (rand()%800+500) //200 to 800pixels per second
-#define DEFYVELMAG_BALL (rand()%800+500)
-#define UPDATE_PERIODX (1000000/DEFXVELMAG_BALL/12.8) //times 12.8 us period
-#define UPDATE_PERIODY (1000000/DEFYVELMAG_BALL/12.8)
-//is this causing unecessary float operations???
+#define OFFSET 200 //offset for starting ball in middle
+#define DEFXPOS_BALL (rand()%(XHIGH-OFFSET-XLOW-OFFSET)+XLOW+OFFSET)
+#define DEFYPOS_BALL (rand()%(YHIGH-YLOW)+YLOW)
+#define VEL_MULT 4
+#define DEFXVELDIR_BALL (VEL_MULT*(rand()%2*2-1)) //1 or -1
+#define DEFYVELDIR_BALL (VEL_MULT*(rand()%2*2-1))
+#define DEFXVELMAG_BALL (rand()%100+400) //400 to 500 pixels per second
+#define DEFYVELMAG_BALL (rand()%100+400)
+#define DEFUPDATEPERX (1000000*VEL_MULT/DEFXVELMAG_BALL/12.8) //times 3.2 us period
+#define DEFUPDATEPERY (1000000*VEL_MULT/DEFYVELMAG_BALL/12.8)
 
 #define PADWIDTH 50
 #define PADTHICKNESS 10
@@ -83,6 +83,7 @@ void updateBall(void);        // update ball position and velocity
 long ballXpos, ballYpos; // 10 bits for each position
 long pad1Ypos = 240; // start at midpoint of screen
 long pad2Ypos = 240;
+unsigned short update_periodx, update_periody;
 signed short ballXvel, ballYvel;
 
 short soundSel = 0; // up to 12 bit sound selecor
@@ -104,6 +105,8 @@ ballXpos = DEFXPOS_BALL;// initialize to default
 ballYpos = DEFYPOS_BALL;
 ballXvel = DEFXVELDIR_BALL;
 ballYvel = DEFYVELDIR_BALL;
+update_periodx = DEFUPDATEPERX;
+update_periody = DEFUPDATEPERY;
 
  while(1) {
 	readMouse(0);
@@ -116,17 +119,17 @@ ballYvel = DEFYVELDIR_BALL;
 
 
 void updateBall(void){
-	if (TMR1>=UPDATE_PERIODX){
+	if (TMR1>=update_periodx){
     	TMR1=0; // reset timer
 		ballXpos+=ballXvel; // update ball position
 	}
-	if (TMR2>=UPDATE_PERIODY){
+	if (TMR2>=update_periody){
     	TMR2=0; // reset timer
 		ballYpos+=ballYvel; // update ball position
 	}
 
 	if (ballXpos>XHIGH-BALLRADIUS-PADTHICKNESS) {
- 		if (ballYpos<pad2Ypos+PADWIDTH && ballYpos>pad2Ypos) {
+ 		if (ballYpos-BALLRADIUS<pad2Ypos+PADWIDTH && ballYpos+BALLRADIUS>pad2Ypos) {
  			// means reflected with paddle
 	 		ballXpos=XHIGH-BALLRADIUS-PADTHICKNESS;
 	 		ballXvel=-1*ballXvel;
@@ -137,12 +140,14 @@ void updateBall(void){
  			ballYpos = DEFYPOS_BALL;
  			ballXvel = DEFXVELDIR_BALL;
  			ballYvel = DEFYVELDIR_BALL;
+			update_periodx = DEFUPDATEPERX;
+			update_periody = DEFUPDATEPERY;
  		}
  	}
  	
 
  	if (ballXpos<XLOW+BALLRADIUS+PADTHICKNESS) {
- 		if (ballYpos<pad1Ypos+PADWIDTH && ballYpos>pad1Ypos) {
+ 		if (ballYpos-BALLRADIUS<pad1Ypos+PADWIDTH && ballYpos+BALLRADIUS>pad1Ypos) {
  			// means reflected with paddle
  			ballXpos=XLOW+BALLRADIUS+PADTHICKNESS;
  			ballXvel=-1*ballXvel;
@@ -153,6 +158,8 @@ void updateBall(void){
  			ballYpos = DEFYPOS_BALL;
  			ballXvel = DEFXVELDIR_BALL;
  			ballYvel = DEFYVELDIR_BALL;
+			update_periodx = DEFUPDATEPERX;
+			update_periody = DEFUPDATEPERY;
  		}
  	}
 	
@@ -193,8 +200,8 @@ void initTimers(void) {
 // bit 10-8: unused
 // bit 7: TGATE=0: disable gated accumulation
 // bit 6: unused
-// bit 5-4: TCKPS=11: 1:256 prescaler, 0.05us*256=12.8us
-// bit 6-4: TCKPS=111: 1:256 prescaler for timer 2
+// bit 5-4: TCKPS=10: 1:64 prescaler, 0.05us*64=3.2us
+// bit 6-4: TCKPS=110: 1:64 prescaler for timer 2
 // bit 3: unused
 // bit 2: don't care in internal clock mode
 // bit 1: TCS=0: use internal peripheral clock
