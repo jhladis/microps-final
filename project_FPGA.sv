@@ -310,3 +310,43 @@ module audio#(parameter PSIZE = 24,
     
     assign audio_out = sound_out | note_out;
 endmodule
+/*
+// module to display arbitrary text at arbitrary location
+module textDisp#(parameter TEXTFILE = "string.txt",
+								   STR_LENGTH = 5,
+									MAGNIFY = 10,
+								   TXTCOLOR = 24'hFFFFFF,
+								   BGCOLOR =  24'h000000,
+								   DIGWIDTH = 6,
+								   DIGHEIGHT = 8)
+                  (input  logic [9:0] x, y, xoff, yoff,
+                   output logic [7:0] r, g, b);
+    
+    logic [7:0] char_address;
+    logic       pixel;
+    logic [5:0] chars [743:0];
+    logic [5:0] line, xcharoff;
+	 logic [7:0] str [4:0];
+	 logic [9:0] xrel, yrel;
+	 
+    initial $readmemb("chars.txt", chars);
+    initial $readmemh(TEXTFILE, str);
+	 
+    always_comb begin
+		  xrel = (x-xoff)/MAGNIFY;
+		  yrel = (y-yoff)/MAGNIFY;
+        if (yrel >= 0 && yrel < DIGHEIGHT && xrel >= 0 && xrel < DIGWIDTH*STR_LENGTH) begin
+				char_address = str[(xrel/DIGWIDTH)];
+				xcharoff = xrel % DIGWIDTH;
+				line = chars[{char_address, yrel[2:0]}];
+				pixel = line[DIGWIDTH-6'd1 - xcharoff];
+		  end else begin
+				char_address = 0;
+				xcharoff = 0;
+            line = 0;
+            pixel = 0;
+        end
+        {r, g, b} = pixel ? TXTCOLOR : BGCOLOR;
+    end
+endmodule
+*/
