@@ -244,43 +244,69 @@ module dataDecode(input  [31:0] received_a, received_b,
     end
 endmodule
 
-module audio#(parameter PERSIZE = 24,
-              parameter DURSIZE = 8)
-             (input  logic        pclk,
-              input  logic [11:0] sound_sel,
+// module to play sound effects and background music
+module audio#(parameter PSIZE = 24,
+              parameter DSIZE = 8)
+             (input  logic        per_clk,
+              input  logic  [3:0] sound_sel,
               output logic        audio_out);
     
-    logic [(PERSIZE+DURSIZE)-1:0] notes [15:0];
-    logic [(PERSIZE+DURSIZE)-1:0] next_note;
-    logic [PERSIZE-1:0] period, pcount;
-    logic [DURSIZE-1:0] duration;
-    logic [DURSIZE+3:0] dcount;
+    logic                     dur_clk, sound_out, note_out;
+    logic [(PSIZE+DSIZE)-1:0] notes [127:0];
+    logic [(PSIZE+DSIZE)-1:0] next_sound, next_note;
+    logic [6:0]               note_index;
+    logic [PSIZE-1:0]         sound_per, sound_per_count, note_per, note_per_count;
+    logic [DSIZE-1:0]         sound_dur, note_dur;
+    logic [DSIZE+3:0]         sound_dur_count, note_dur_count;
     
     initial $readmemh("notes.txt", notes);
     
-    // 2 kHz clock for note durations
+    // 1.6 kHz clock for note durations
     audioPLL audioPLL_inst (.areset ( areset_sig ),
-                            .inclk0 ( pclk ),
-                            .c0 ( dclk ),
+                            .inclk0 ( per_clk ),
+                            .c0 ( dur_clk ),
                             .locked ( locked_sig ));
     
-    assign next_note = notes[sound_sel[6:0]];
+    assign next_sound = notes[sound_sel];
+    assign next_note = notes[note_index + 5'd16];
     
-    always_ff@(posedge dclk) begin
-        if (dcount >= {duration, 4'b0}) begin
-            dcount <= '0;
-            {period, duration} <= next_note;
+    always_ff@(posedge dur_clk) begin
+        //sound effects
+        if (sound_dur_count >= {sound_dur, 4'b0}) begin
+            sound_dur_count <= '0;
+            {sound_per, sound_dur} <= next_sound;
         end else
-            dcount <= dcount + 1'b1;
+            sound_dur_count <= sound_dur_count + 1'b1;
+        //music
+        if (note_dur == '0) begin
+            note_index <= '0;
+            {note_per, note_dur} <= next_note;
+        end else if (note_dur_count >= {note_dur, 4'b0}) begin
+            note_dur_count <= '0;
+            {note_per, note_dur} <= next_note;
+            note_index <= note_index + 1'b1;
+        end else
+            note_dur_count <= note_dur_count + 1'b1;
     end
     
-    always_ff@(posedge pclk) begin
-        if (~|period)
-            audio_out <= 0;
-        else if (pcount >= period) begin
-            pcount <= '0;
-            audio_out <= ~audio_out;
+    always_ff@(posedge per_clk) begin
+        //sound effects
+        if (sound_per == 0)
+            sound_out <= 0;
+        else if (sound_per_count >= sound_per) begin
+            sound_per_count <= '0;
+            sound_out <= ~sound_out;
         end else
-            pcount <= pcount + 1'b1;
+            sound_per_count <= sound_per_count + 1'b1;
+        //music
+        if (note_per == 0)
+            note_out <= 0;
+        else if (note_per_count >= note_per) begin
+            note_per_count <= '0;
+            note_out <= ~note_out;
+        end else
+            note_per_count <= note_per_count + 1'b1;
     end
+    
+    assign audio_out = sound_out | note_out;
 endmodule
