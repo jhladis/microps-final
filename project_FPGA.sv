@@ -18,7 +18,6 @@ module project_FPGA(input  logic       clk,
                     output logic       audio_out);             // to audio amplifier
 
     logic [9:0] paddle1, paddle2, ballx, bally;
-    logic [9:0] paddle1TEST, paddle2TEST, ballxTEST, ballyTEST;
     logic [9:0] x, y;
     logic [5:0] score1, score2;
     logic [31:0] send_a, send_b, received_a, received_b;
@@ -27,16 +26,11 @@ module project_FPGA(input  logic       clk,
     
     assign led = paddle1[9:2];
     
-    assign paddle1TEST = 10'd100;
-    assign paddle2TEST = 10'd100;
-    assign ballxTEST = 10'd100;
-    assign ballyTEST = 10'd100;
-    
     vgaCont vgaCont(.clk(clk), .r_int(r_int), .g_int(g_int), .b_int(b_int),
                     .vgaclk(vgaclk), .hsync(hsync), .vsync(vsync), .sync_b(sync_b), .x(x), .y(y),
                     .r_out(r_out), .g_out(g_out), .b_out(b_out));
     
-    videoGen videoGen(.paddle1(paddle1TEST), .paddle2(paddle2TEST), .ballx(ballxTEST), .bally(ballyTEST),
+    videoGen videoGen(.paddle1(paddle1), .paddle2(paddle2), .ballx(ballx), .bally(bally),
                       .score1(score1), .score2(score2),.x(x), .y(y),
                       .r_int(r_int), .g_int(g_int), .b_int(b_int));
     
@@ -162,14 +156,14 @@ module headerDisp#(parameter HEADHEIGHT = 10'd10,
     initial $readmemh("str.txt", str);
     
     always_comb begin
-//        digit_1a = score1 / 6'd10;
-//        digit_1b = score1 % 6'd10;
-//        digit_2a = score2 / 6'd10;
-//        digit_2b = score2 % 6'd10;
-        digit_1a = 4'd0;
-        digit_1b = 4'd1;
-        digit_2a = 4'd2;
-        digit_2b = 4'd3;
+        digit_1a = score1 / 6'd10;
+        digit_1b = score1 % 6'd10;
+        digit_2a = score2 / 6'd10;
+        digit_2b = score2 % 6'd10;
+//        digit_1a = 4'd0;
+//        digit_1b = 4'd1;
+//        digit_2a = 4'd2;
+//        digit_2b = 4'd3;
     
         if (y < CHARHEIGHT) begin
             if (x < LABELWIDTH) begin
