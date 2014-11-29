@@ -72,12 +72,14 @@ void updateBall(void);        // update ball position and velocity
 #define DEFYVELDIR_BALL (VEL_MULT*(rand()%2*2-1))
 #define DEFXVELMAG_BALL (rand()%100+400) //400 to 500 pixels per second
 #define DEFYVELMAG_BALL (rand()%100+400)
-#define DEFUPDATEPERX (1000000*VEL_MULT/DEFXVELMAG_BALL/12.8) //times 3.2 us period
+#define DEFUPDATEPERX (1000000*VEL_MULT/DEFXVELMAG_BALL/12.8) //times 12.8 us period
 #define DEFUPDATEPERY (1000000*VEL_MULT/DEFYVELMAG_BALL/12.8)
 
 #define PADWIDTH 50
 #define PADTHICKNESS 10
 #define BALLRADIUS 10
+
+#define PLAYING (score1<WINSCORE && score2<WINSCORE)
 
 // global variables
 long ballXpos, ballYpos; // 10 bits for each position
@@ -86,7 +88,10 @@ long pad2Ypos = 240;
 unsigned short update_periodx, update_periody;
 signed short ballXvel, ballYvel;
 
+short msgSel = 1; // 3 bits for game messages
+
 short soundSel = 0; // up to 12 bit sound selecor
+
 short score1 = 0; // 6 bits for score
 short score2 = 0; 
 
@@ -97,22 +102,37 @@ short score2 = 0;
 
 void main(void) {
 
-ps2setup();
-initSPI();
-initTimers();
+ ps2setup();
+ initSPI();
+ initTimers();
 
-ballXpos = DEFXPOS_BALL;// initialize to default
-ballYpos = DEFYPOS_BALL;
-ballXvel = DEFXVELDIR_BALL;
-ballYvel = DEFYVELDIR_BALL;
-update_periodx = DEFUPDATEPERX;
-update_periody = DEFUPDATEPERY;
+ ballXpos = DEFXPOS_BALL;// initialize to default
+ ballYpos = DEFYPOS_BALL;
+ ballXvel = DEFXVELDIR_BALL;
+ ballYvel = DEFYVELDIR_BALL;
+ update_periodx = DEFUPDATEPERX;
+ update_periody = DEFUPDATEPERY;
 
- while(1) {
-	readMouse(0);
-	readMouse(1);
-	if (score1<WINSCORE && score2<WINSCORE)
-		updateBall(); // update ball position until end of game
+ while (msgSel<3){
+ 	readMouse(0);
+ 	readMouse(1);
+ 	sendtoFPGA();
+ 	if (TMR2>3*1000000/12.8){
+ 		msgSel++;
+		TMR2=0;
+ 	}
+ }
+ 
+ msgSel=0;
+ TMR1=0; //reset ball motion timers
+ TMR2=0;
+
+ while(1) {  // main game loop
+	if (PLAYING){
+		readMouse(0);
+		readMouse(1);
+	} else msgSel=4;
+	updateBall();
 	sendtoFPGA();
  } 
 }
@@ -129,8 +149,8 @@ void updateBall(void){
 	}
 
 	if (ballXpos>XHIGH-BALLRADIUS-PADTHICKNESS) {
- 		if (ballYpos-BALLRADIUS<pad2Ypos+PADWIDTH && ballYpos+BALLRADIUS>pad2Ypos) {
- 			// means reflected with paddle
+		if (!PLAYING || ballYpos-BALLRADIUS<pad2Ypos+PADWIDTH && ballYpos+BALLRADIUS>pad2Ypos) {
+ 			// means reflected with paddle, or game over
 	 		ballXpos=XHIGH-BALLRADIUS-PADTHICKNESS;
 	 		ballXvel=-1*ballXvel;
  		} else { //reset ball with default values
@@ -147,8 +167,8 @@ void updateBall(void){
  	
 
  	if (ballXpos<XLOW+BALLRADIUS+PADTHICKNESS) {
- 		if (ballYpos-BALLRADIUS<pad1Ypos+PADWIDTH && ballYpos+BALLRADIUS>pad1Ypos) {
- 			// means reflected with paddle
+		if (!PLAYING || ballYpos-BALLRADIUS<pad1Ypos+PADWIDTH && ballYpos+BALLRADIUS>pad1Ypos) {
+ 			// means reflected with paddle, or game over
  			ballXpos=XLOW+BALLRADIUS+PADTHICKNESS;
  			ballXvel=-1*ballXvel;
  		} else { //reset ball with default values
@@ -180,7 +200,7 @@ void sendtoFPGA(void){
 
 	//mask off to prevent overflow
 	unsigned long send1 = (ballXpos<<22)|(ballYpos<<12)|((0x3f&score1)<<6)|(0x3f&score2);
-	unsigned long send2 = (pad1Ypos<<22)|(pad2Ypos<<12)|(0xfff&soundSel);
+	unsigned long send2 = (pad1Ypos<<22)|(pad2Ypos<<12)|(0xfff&soundSel<<3)|(0x7&msgSel);
 	spi_send_receive(send1, send2);
 }
 
@@ -200,14 +220,14 @@ void initTimers(void) {
 // bit 10-8: unused
 // bit 7: TGATE=0: disable gated accumulation
 // bit 6: unused
-// bit 5-4: TCKPS=10: 1:64 prescaler, 0.05us*64=3.2us
-// bit 6-4: TCKPS=110: 1:64 prescaler for timer 2
-// bit 3: unused
+// bit 5-4: TCKPS=11: 1:256 prescaler, 0.05us*256=12.8us
+// bit 6-4: TCKPS=111: 1:256 prescaler for timer 2
+// bit 3: T32=1 for 32 bit mode for timer 2, unused for timer 1
 // bit 2: don't care in internal clock mode
 // bit 1: TCS=0: use internal peripheral clock
 // bit 0: unused
 T1CON = 0b1001000000110000;
-T2CON = 0b1001000001110000;
+T2CON = 0b1001000001111000;
 }
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -221,7 +241,7 @@ void initSPI(void) {
 
 	SPI4CONbits.ON = 0; // disable SPI to reset any previous state
 	junk = SPI4BUF; // read SPI buffer to clear the receive buffer
-	SPI4BRG = 0; //set BAUD rate to 10MHz, with Pclk at 20MHz 
+	SPI4BRG = 9; //set BAUD rate to 1MHz, with Pclk at 20MHz 
 	SPI4CONbits.MSTEN = 1; // enable master mode
 	SPI4CONbits.CKE = 1; // set clock-to-data timing (data centered on rising SCK edge) 
 	SPI4CONbits.MODE32 = 1; //enable 32 bit mode
