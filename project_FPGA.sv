@@ -23,9 +23,9 @@ module project_FPGA(input  logic       clk,
     logic [31:0] send_a, send_b, received_a, received_b;
     logic [7:0] r_int, g_int, b_int;
     logic [8:0] sound_sel;
-	 logic [2:0] msg_sel, m_sel;
+    logic [2:0] msg_sel;//, m_sel;
     
-    assign m_sel = 3'b1;
+    //assign m_sel = 3'b1;
     
     vgaCont vgaCont(.clk(clk), .r_int(r_int), .g_int(g_int), .b_int(b_int),
                     .vgaclk(vgaclk), .hsync(hsync), .vsync(vsync), .sync_b(sync_b), .x(x), .y(y),
@@ -42,9 +42,9 @@ module project_FPGA(input  logic       clk,
     
     dataDecode dataDecode(.send_a(send_a), .send_b(send_b), .received_a(received_a), .received_b(received_b),
                           .ballx(ballx), .bally(bally), .score1(score1), .score2(score2),
-                          .paddle1(paddle1), .paddle2(paddle2), .sound_sel(sound_sel), .msg_sel(m_sel));
+                          .paddle1(paddle1), .paddle2(paddle2), .sound_sel(sound_sel), .msg_sel(msg_sel));
 
-    //audio audio(.pclk(clk), .sound_sel(sound_sel), .audio_out(audio_out));
+    audio audio(.per_clk(clk), .sound_sel(sound_sel), .audio_out(audio_out));
 endmodule
 
 
@@ -107,7 +107,7 @@ module videoGen#(parameter SCREENWIDTH = 10'd640,
                            BALLCOLOR = 24'h6060FF)
                 (input  logic [9:0] paddle1, paddle2, ballx, bally, x, y,
                  input  logic [5:0] score1, score2,
-					  input  logic [2:0] msg_sel,
+                 input  logic [2:0] msg_sel,
                  output logic [7:0] r_int, g_int, b_int);
 
     logic [7:0] r_head, g_head, b_head;
@@ -116,8 +116,8 @@ module videoGen#(parameter SCREENWIDTH = 10'd640,
     
     headerDisp headerDisp(.x(x), .y(y), .score1(score1), .score2(score2),
                           .r(r_head), .g(g_head), .b(b_head));
-								  
-	 msgDisp msgDisp(.x(x), .y(y), .msg_sel(msg_sel), .textcolor(textcolor), .pixel(in_text));
+
+    msgDisp msgDisp(.x(x), .y(y), .msg_sel(msg_sel), .textcolor(textcolor), .pixel(in_text));
     
     logic in_paddle1, in_paddle2, in_ball;
     logic [9:0] dist2ballx, dist2bally;
@@ -131,9 +131,9 @@ module videoGen#(parameter SCREENWIDTH = 10'd640,
         dist2bally = (y > bally) ? (y - bally) : (bally - y);
         dist2ballr = (dist2ballx*dist2ballx + dist2bally*dist2bally);
         in_ball = dist2ballr >= '0 & dist2ballr <= BALLSIZE;
-			
-		  if (in_text)
-				{r_int, g_int, b_int} = textcolor;
+        
+        if (in_text)
+            {r_int, g_int, b_int} = textcolor;
         else if (in_ball)
             {r_int, g_int, b_int} = BALLCOLOR;
         else if (in_paddle1 | in_paddle2)
@@ -197,6 +197,68 @@ module headerDisp#(parameter HEADHEIGHT = 10'd10,
     end
 endmodule
 
+//
+module msgDisp#(parameter TEXTCOLOR = 24'hFFFFFF,
+                          BGCOLOR = 24'h000000)
+               (input  logic [9:0]  x, y,
+                input  logic [2:0]  msg_sel,
+                output logic        pixel,
+                output logic [23:0] textcolor);
+    
+    logic [9:0]  xoff, yoff, str_addr, str_length;
+    
+    always_comb begin
+        textcolor = 24'hFFFFFF;
+        case(msg_sel)
+            3'b1 : begin
+                xoff=10'd300; yoff=10'd300; str_addr='0; str_length=10'd5;
+            end
+            default : begin
+                xoff=10'd300; yoff=10'd300; str_addr='0; str_length=10'd5;
+            end
+        endcase
+    end
+    
+    textDisp textDisp(.x(x), .y(y), .xoff(xoff), .yoff(yoff), .str_addr(str_addr), .str_length(str_length), .pixel(pixel));
+    
+endmodule
+
+// module to display arbitrary text at arbitrary location
+module textDisp#(parameter TEXTFILE = "string.txt",
+                 CHARFILE = "chars.txt",
+                 TXT_LENGTH = 5,  // total chars in text file
+                 MAGNIFY = 10'd10,
+                 DIGWIDTH = 10'd6,
+                 DIGHEIGHT = 10'd8)
+                (input  logic [9:0]  x, y, xoff, yoff, str_addr, str_length,
+                 output logic        pixel);
+    
+    logic [7:0] char_address;
+    logic [5:0] chars [743:0];
+    logic [5:0] line, xcharoff;
+    logic [7:0] text [TXT_LENGTH-1:0];
+    logic [9:0] xrel, yrel;
+    
+    initial $readmemb("chars.txt", chars);
+    initial $readmemh("string.txt", text);  // read in ascii encoding of text
+    
+    always_comb begin
+        xrel = (x-xoff)/MAGNIFY;
+        yrel = (y-yoff)/MAGNIFY;
+        if (yrel >= '0 && yrel < DIGHEIGHT && xrel >= '0 && xrel < DIGWIDTH*str_length) begin
+            char_address = text[(str_length+xrel/DIGWIDTH)];
+            xcharoff = xrel % DIGWIDTH;
+            line = chars[{char_address, yrel[2:0]}];
+            pixel = line[DIGWIDTH-6'd1 - xcharoff];
+        end else begin
+            char_address = '0;
+            xcharoff = '0;
+            line = '0;
+            pixel = 0;
+        end
+    end
+endmodule
+
 // module to transmit information to and from PIC over SPI
 module spiSlave(input  logic        sck, sdo, reset, vsync,
                 input  logic [31:0] d,              // d = data to send
@@ -238,8 +300,8 @@ module dataDecode(input  [31:0] received_a, received_b,
                   output [31:0] send_a, send_b,
                   output  [9:0] ballx, bally, paddle1, paddle2,
                   output  [5:0] score1, score2,
-                  output [8:0] sound_sel,
-						output [2:0] msg_sel);
+                  output  [8:0] sound_sel,
+                  output  [2:0] msg_sel);
 
     always_comb begin
         send_a = '0;         // don't send anything
@@ -249,128 +311,47 @@ module dataDecode(input  [31:0] received_a, received_b,
     end
 endmodule
 
-//// module to play sound effects and background music
-//module audio#(parameter PSIZE = 24,
-//              parameter DSIZE = 8)
-//             (input  logic        per_clk,
-//              input  logic  [3:0] sound_sel,
-//              output logic        audio_out);
-//    
-//    logic                     dur_clk, sound_out, note_out;
-//    logic [(PSIZE+DSIZE)-1:0] notes [127:0];
-//    logic [(PSIZE+DSIZE)-1:0] next_sound, next_note;
-//    logic [6:0]               note_index;
-//    logic [PSIZE-1:0]         sound_per, sound_per_count, note_per, note_per_count;
-//    logic [DSIZE-1:0]         sound_dur, note_dur;
-//    logic [DSIZE+3:0]         sound_dur_count, note_dur_count;
-//    
-//    initial $readmemh("notes.txt", notes);
-//    
-//    // 1.6 kHz clock for note durations
-//    audioPLL audioPLL_inst (.areset ( areset_sig ),
-//                            .inclk0 ( per_clk ),
-//                            .c0 ( dur_clk ),
-//                            .locked ( locked_sig ));
-//    
-//    assign next_sound = notes[sound_sel];
-//    assign next_note = notes[note_index + 5'd16];
-//    
-//    always_ff@(posedge dur_clk) begin
-//        //sound effects
-//        if (sound_dur_count >= {sound_dur, 4'b0}) begin
-//            sound_dur_count <= '0;
-//            {sound_per, sound_dur} <= next_sound;
-//        end else
-//            sound_dur_count <= sound_dur_count + 1'b1;
-//        //music
-//        if (note_dur == '0) begin
-//            note_index <= '0;
-//            {note_per, note_dur} <= next_note;
-//        end else if (note_dur_count >= {note_dur, 4'b0}) begin
-//            note_dur_count <= '0;
-//            {note_per, note_dur} <= next_note;
-//            note_index <= note_index + 1'b1;
-//        end else
-//            note_dur_count <= note_dur_count + 1'b1;
-//    end
-//    
-//    always_ff@(posedge per_clk) begin
-//        //sound effects
-//        if (sound_per == 0)
-//            sound_out <= 0;
-//        else if (sound_per_count >= sound_per) begin
-//            sound_per_count <= '0;
-//            sound_out <= ~sound_out;
-//        end else
-//            sound_per_count <= sound_per_count + 1'b1;
-//        //music
-//        if (note_per == 0)
-//            note_out <= 0;
-//        else if (note_per_count >= note_per) begin
-//            note_per_count <= '0;
-//            note_out <= ~note_out;
-//        end else
-//            note_per_count <= note_per_count + 1'b1;
-//    end
-//    
-//    assign audio_out = sound_out | note_out;
-//endmodule
-
-// module to display arbitrary text at arbitrary location
-module textDisp#(parameter TEXTFILE = "string.txt",
-									CHARFILE = "chars.txt",
-								   TXT_LENGTH = 5,  // total chars in text file
-									MAGNIFY = 10,
-								   DIGWIDTH = 6,
-								   DIGHEIGHT = 8)
-                  (input  logic [9:0]  x, y, xoff, yoff, str_addr, str_length,
-                   output logic        pixel);
+// module to play sound effects as directed by PIC
+module audio#(parameter PSIZE = 24,
+              parameter DSIZE = 8)
+             (input  logic        per_clk,
+              input  logic  [8:0] sound_sel,
+              output logic        audio_out);
     
-    logic [7:0] char_address;
-    logic [5:0] chars [743:0];
-    logic [5:0] line, xcharoff;
-	 logic [7:0] text [TXT_LENGTH-1:0];
-	 logic [9:0] xrel, yrel;
-	 
-    initial $readmemb("chars.txt", chars);
-    initial $readmemh("string.txt", text);  // read in ascii encoding of text
-	 
-    always_comb begin
-		  xrel = (x-xoff)/MAGNIFY;
-		  yrel = (y-yoff)/MAGNIFY;
-        if (yrel >= 0 && yrel < DIGHEIGHT && xrel >= 0 && xrel < DIGWIDTH*str_length) begin
-				char_address = text[(str_length+xrel/DIGWIDTH)];
-				xcharoff = xrel % DIGWIDTH;
-				line = chars[{char_address, yrel[2:0]}];
-				pixel = line[DIGWIDTH-6'd1 - xcharoff];
-		  end else begin
-				char_address = 0;
-				xcharoff = 0;
-            line = 0;
-            pixel = 0;
-        end
+    logic                     dur_clk;
+    logic [(PSIZE+DSIZE)-1:0] sounds [127:0];
+    logic [6:0]               sound_index;
+    logic [PSIZE-1:0]         sound_per, per_count;
+    logic [DSIZE-1:0]         sound_dur;
+    logic [DSIZE+3:0]         dur_count;
+    
+    initial $readmemh("sounds.txt", sounds);
+    
+    // 1.6 kHz clock for sound durations
+    audioPLL audioPLL_inst (.areset ( areset_sig ),
+                            .inclk0 ( per_clk ),
+                            .c0 ( dur_clk ),
+                            .locked ( locked_sig ));
+    
+    always_ff@(posedge dur_clk) begin
+        if (sound_dur == '0) begin
+            sound_index <= sound_sel[6:0];
+            {sound_per, sound_dur} <= sounds[sound_index];
+        end else if (dur_count >= {sound_dur, 4'b0}) begin
+            dur_count <= '0;
+            {sound_per, sound_dur} <= sounds[sound_index + 1'b1];
+            sound_index <= sound_index + 1'b1;
+        end else
+            dur_count <= dur_count + 1'b1;
     end
-endmodule
-
-module msgDisp (input logic [9:0]   x, y,
-					 input logic [2:0]   msg_sel,
-					 output logic        pixel,
-					 output logic [23:0] textcolor);
-	
-	logic [9:0]  xoff, yoff, str_addr, str_length;
-	
-	assign textcolor = 24'hFFFFFF;
-	
-	always_comb
-	 case(msg_sel)
-	 3'b1 : begin
-	 xoff=10'd300; yoff=10'd300; str_addr='0; str_length=10'd5;
-	 end
-	 default : begin
-	 xoff=10'd300; yoff=10'd300; str_addr='0; str_length=10'd5;
-	 end
-	 endcase
-	 
-	 textDisp textDisp(.x(x), .y(y), .xoff(xoff), .yoff(yoff), .str_addr(str_addr), .str_length(str_length), .pixel(pixel));
-	
+    
+    always_ff@(posedge per_clk) begin
+        if (sound_per == 0)
+            audio_out <= 0;
+        else if (per_count >= sound_per) begin
+            per_count <= '0;
+            audio_out <= ~audio_out;
+        end else
+            per_count <= per_count + 1'b1;
+    end
 endmodule
