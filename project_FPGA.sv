@@ -22,10 +22,10 @@ module project_FPGA(input  logic       clk,
     logic [5:0] score1, score2;
     logic [31:0] send_a, send_b, received_a, received_b;
     logic [7:0] r_int, g_int, b_int;
-    logic [9:0] sound_sel;
-	 logic [2:0] msg_sel;
+    logic [8:0] sound_sel;
+	 logic [2:0] msg_sel, m_sel;
     
-    assign led = paddle1[9:2];
+    assign m_sel = 3'b1;
     
     vgaCont vgaCont(.clk(clk), .r_int(r_int), .g_int(g_int), .b_int(b_int),
                     .vgaclk(vgaclk), .hsync(hsync), .vsync(vsync), .sync_b(sync_b), .x(x), .y(y),
@@ -42,7 +42,7 @@ module project_FPGA(input  logic       clk,
     
     dataDecode dataDecode(.send_a(send_a), .send_b(send_b), .received_a(received_a), .received_b(received_b),
                           .ballx(ballx), .bally(bally), .score1(score1), .score2(score2),
-                          .paddle1(paddle1), .paddle2(paddle2), .sound_sel(sound_sel), .msg_sel(msg_sel));
+                          .paddle1(paddle1), .paddle2(paddle2), .sound_sel(sound_sel), .msg_sel(m_sel));
 
     //audio audio(.pclk(clk), .sound_sel(sound_sel), .audio_out(audio_out));
 endmodule
@@ -66,7 +66,7 @@ module vgaCont#(parameter HMAX   = 10'd800,
     logic       valid;
     
     // use PLL to create 25.175 MHz VGA clock
-    pll pll_inst (.areset ( areset_sig ),
+    vgaPLL vgaPLL_inst (.areset ( areset_sig ),
                         .inclk0 ( clk ),
                         .c0 ( vgaclk ),
                         .locked ( locked_sig ));
@@ -111,6 +111,8 @@ module videoGen#(parameter SCREENWIDTH = 10'd640,
                  output logic [7:0] r_int, g_int, b_int);
 
     logic [7:0] r_head, g_head, b_head;
+    logic in_text;
+    logic [23:0] textcolor;
     
     headerDisp headerDisp(.x(x), .y(y), .score1(score1), .score2(score2),
                           .r(r_head), .g(g_head), .b(b_head));
@@ -243,76 +245,76 @@ module dataDecode(input  [31:0] received_a, received_b,
         send_a = '0;         // don't send anything
         send_b = '0;         // don't send anything
         {ballx, bally, score1, score2} = received_a;
-        {paddle1, paddle2, sound_sel} = received_b;
+        {paddle1, paddle2, sound_sel, msg_sel} = received_b;
     end
 endmodule
 
-// module to play sound effects and background music
-module audio#(parameter PSIZE = 24,
-              parameter DSIZE = 8)
-             (input  logic        per_clk,
-              input  logic  [3:0] sound_sel,
-              output logic        audio_out);
-    
-    logic                     dur_clk, sound_out, note_out;
-    logic [(PSIZE+DSIZE)-1:0] notes [127:0];
-    logic [(PSIZE+DSIZE)-1:0] next_sound, next_note;
-    logic [6:0]               note_index;
-    logic [PSIZE-1:0]         sound_per, sound_per_count, note_per, note_per_count;
-    logic [DSIZE-1:0]         sound_dur, note_dur;
-    logic [DSIZE+3:0]         sound_dur_count, note_dur_count;
-    
-    initial $readmemh("notes.txt", notes);
-    
-    // 1.6 kHz clock for note durations
-    audioPLL audioPLL_inst (.areset ( areset_sig ),
-                            .inclk0 ( per_clk ),
-                            .c0 ( dur_clk ),
-                            .locked ( locked_sig ));
-    
-    assign next_sound = notes[sound_sel];
-    assign next_note = notes[note_index + 5'd16];
-    
-    always_ff@(posedge dur_clk) begin
-        //sound effects
-        if (sound_dur_count >= {sound_dur, 4'b0}) begin
-            sound_dur_count <= '0;
-            {sound_per, sound_dur} <= next_sound;
-        end else
-            sound_dur_count <= sound_dur_count + 1'b1;
-        //music
-        if (note_dur == '0) begin
-            note_index <= '0;
-            {note_per, note_dur} <= next_note;
-        end else if (note_dur_count >= {note_dur, 4'b0}) begin
-            note_dur_count <= '0;
-            {note_per, note_dur} <= next_note;
-            note_index <= note_index + 1'b1;
-        end else
-            note_dur_count <= note_dur_count + 1'b1;
-    end
-    
-    always_ff@(posedge per_clk) begin
-        //sound effects
-        if (sound_per == 0)
-            sound_out <= 0;
-        else if (sound_per_count >= sound_per) begin
-            sound_per_count <= '0;
-            sound_out <= ~sound_out;
-        end else
-            sound_per_count <= sound_per_count + 1'b1;
-        //music
-        if (note_per == 0)
-            note_out <= 0;
-        else if (note_per_count >= note_per) begin
-            note_per_count <= '0;
-            note_out <= ~note_out;
-        end else
-            note_per_count <= note_per_count + 1'b1;
-    end
-    
-    assign audio_out = sound_out | note_out;
-endmodule
+//// module to play sound effects and background music
+//module audio#(parameter PSIZE = 24,
+//              parameter DSIZE = 8)
+//             (input  logic        per_clk,
+//              input  logic  [3:0] sound_sel,
+//              output logic        audio_out);
+//    
+//    logic                     dur_clk, sound_out, note_out;
+//    logic [(PSIZE+DSIZE)-1:0] notes [127:0];
+//    logic [(PSIZE+DSIZE)-1:0] next_sound, next_note;
+//    logic [6:0]               note_index;
+//    logic [PSIZE-1:0]         sound_per, sound_per_count, note_per, note_per_count;
+//    logic [DSIZE-1:0]         sound_dur, note_dur;
+//    logic [DSIZE+3:0]         sound_dur_count, note_dur_count;
+//    
+//    initial $readmemh("notes.txt", notes);
+//    
+//    // 1.6 kHz clock for note durations
+//    audioPLL audioPLL_inst (.areset ( areset_sig ),
+//                            .inclk0 ( per_clk ),
+//                            .c0 ( dur_clk ),
+//                            .locked ( locked_sig ));
+//    
+//    assign next_sound = notes[sound_sel];
+//    assign next_note = notes[note_index + 5'd16];
+//    
+//    always_ff@(posedge dur_clk) begin
+//        //sound effects
+//        if (sound_dur_count >= {sound_dur, 4'b0}) begin
+//            sound_dur_count <= '0;
+//            {sound_per, sound_dur} <= next_sound;
+//        end else
+//            sound_dur_count <= sound_dur_count + 1'b1;
+//        //music
+//        if (note_dur == '0) begin
+//            note_index <= '0;
+//            {note_per, note_dur} <= next_note;
+//        end else if (note_dur_count >= {note_dur, 4'b0}) begin
+//            note_dur_count <= '0;
+//            {note_per, note_dur} <= next_note;
+//            note_index <= note_index + 1'b1;
+//        end else
+//            note_dur_count <= note_dur_count + 1'b1;
+//    end
+//    
+//    always_ff@(posedge per_clk) begin
+//        //sound effects
+//        if (sound_per == 0)
+//            sound_out <= 0;
+//        else if (sound_per_count >= sound_per) begin
+//            sound_per_count <= '0;
+//            sound_out <= ~sound_out;
+//        end else
+//            sound_per_count <= sound_per_count + 1'b1;
+//        //music
+//        if (note_per == 0)
+//            note_out <= 0;
+//        else if (note_per_count >= note_per) begin
+//            note_per_count <= '0;
+//            note_out <= ~note_out;
+//        end else
+//            note_per_count <= note_per_count + 1'b1;
+//    end
+//    
+//    assign audio_out = sound_out | note_out;
+//endmodule
 
 // module to display arbitrary text at arbitrary location
 module textDisp#(parameter TEXTFILE = "string.txt",
@@ -361,11 +363,11 @@ module msgDisp (input logic [9:0]   x, y,
 	
 	always_comb
 	 case(msg_sel)
-	 1 : begin
-	 xoff=300; yoff=300; str_addr=0; str_length=5;
+	 3'b1 : begin
+	 xoff=10'd300; yoff=10'd300; str_addr='0; str_length=10'd5;
 	 end
 	 default : begin
-	 xoff=0; yoff=0; str_addr=0; str_length=0;
+	 xoff=10'd300; yoff=10'd300; str_addr='0; str_length=10'd5;
 	 end
 	 endcase
 	 
