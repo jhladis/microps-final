@@ -22,7 +22,8 @@ module project_FPGA(input  logic       clk,
     logic [5:0] score1, score2;
     logic [31:0] send_a, send_b, received_a, received_b;
     logic [7:0] r_int, g_int, b_int;
-    logic [11:0] sound_sel;
+    logic [9:0] sound_sel;
+	 logic [2:0] msg_sel;
     
     assign led = paddle1[9:2];
     
@@ -32,7 +33,7 @@ module project_FPGA(input  logic       clk,
     
     videoGen videoGen(.paddle1(paddle1), .paddle2(paddle2), .ballx(ballx), .bally(bally),
                       .score1(score1), .score2(score2),.x(x), .y(y),
-                      .r_int(r_int), .g_int(g_int), .b_int(b_int));
+                      .r_int(r_int), .g_int(g_int), .b_int(b_int), .msg_sel(msg_sel));
     
     spiSlave spiSlave1(.sck(sck_a), .sdo(sdo_a), .sdi(sdi_a), .reset(spiRst), .vsync(vsync),
                        .d(send_a), .q(received_a));
@@ -41,9 +42,9 @@ module project_FPGA(input  logic       clk,
     
     dataDecode dataDecode(.send_a(send_a), .send_b(send_b), .received_a(received_a), .received_b(received_b),
                           .ballx(ballx), .bally(bally), .score1(score1), .score2(score2),
-                          .paddle1(paddle1), .paddle2(paddle2), .sound_sel(sound_sel));
+                          .paddle1(paddle1), .paddle2(paddle2), .sound_sel(sound_sel), .msg_sel(msg_sel));
 
-    audio audio(.pclk(clk), .sound_sel(sound_sel), .audio_out(audio_out));
+    //audio audio(.pclk(clk), .sound_sel(sound_sel), .audio_out(audio_out));
 endmodule
 
 
@@ -65,7 +66,7 @@ module vgaCont#(parameter HMAX   = 10'd800,
     logic       valid;
     
     // use PLL to create 25.175 MHz VGA clock
-    vgaPLL vgaPLL_inst (.areset ( areset_sig ),
+    pll pll_inst (.areset ( areset_sig ),
                         .inclk0 ( clk ),
                         .c0 ( vgaclk ),
                         .locked ( locked_sig ));
@@ -106,12 +107,15 @@ module videoGen#(parameter SCREENWIDTH = 10'd640,
                            BALLCOLOR = 24'h6060FF)
                 (input  logic [9:0] paddle1, paddle2, ballx, bally, x, y,
                  input  logic [5:0] score1, score2,
+					  input  logic [2:0] msg_sel,
                  output logic [7:0] r_int, g_int, b_int);
 
     logic [7:0] r_head, g_head, b_head;
     
     headerDisp headerDisp(.x(x), .y(y), .score1(score1), .score2(score2),
                           .r(r_head), .g(g_head), .b(b_head));
+								  
+	 msgDisp msgDisp(.x(x), .y(y), .msg_sel(msg_sel), .textcolor(textcolor), .pixel(in_text));
     
     logic in_paddle1, in_paddle2, in_ball;
     logic [9:0] dist2ballx, dist2bally;
@@ -125,8 +129,10 @@ module videoGen#(parameter SCREENWIDTH = 10'd640,
         dist2bally = (y > bally) ? (y - bally) : (bally - y);
         dist2ballr = (dist2ballx*dist2ballx + dist2bally*dist2bally);
         in_ball = dist2ballr >= '0 & dist2ballr <= BALLSIZE;
-    
-        if (in_ball)
+			
+		  if (in_text)
+				{r_int, g_int, b_int} = textcolor;
+        else if (in_ball)
             {r_int, g_int, b_int} = BALLCOLOR;
         else if (in_paddle1 | in_paddle2)
             {r_int, g_int, b_int} = PADDLECOLOR;
@@ -152,7 +158,7 @@ module headerDisp#(parameter HEADHEIGHT = 10'd10,
     logic [5:0] line;
     logic       pixel;
     
-    initial $readmemb("charrom.txt", chars);
+    initial $readmemb("chars.txt", chars);
     initial $readmemh("str.txt", str);
     
     always_comb begin
@@ -160,10 +166,6 @@ module headerDisp#(parameter HEADHEIGHT = 10'd10,
         digit_1b = score1 % 6'd10;
         digit_2a = score2 / 6'd10;
         digit_2b = score2 % 6'd10;
-//        digit_1a = 4'd0;
-//        digit_1b = 4'd1;
-//        digit_2a = 4'd2;
-//        digit_2b = 4'd3;
     
         if (y < CHARHEIGHT) begin
             if (x < LABELWIDTH) begin
@@ -234,7 +236,8 @@ module dataDecode(input  [31:0] received_a, received_b,
                   output [31:0] send_a, send_b,
                   output  [9:0] ballx, bally, paddle1, paddle2,
                   output  [5:0] score1, score2,
-                  output [11:0] sound_sel);
+                  output [8:0] sound_sel,
+						output [2:0] msg_sel);
 
     always_comb begin
         send_a = '0;         // don't send anything
@@ -310,33 +313,31 @@ module audio#(parameter PSIZE = 24,
     
     assign audio_out = sound_out | note_out;
 endmodule
-/*
+
 // module to display arbitrary text at arbitrary location
 module textDisp#(parameter TEXTFILE = "string.txt",
-								   STR_LENGTH = 5,
+									CHARFILE = "chars.txt",
+								   TXT_LENGTH = 5,  // total chars in text file
 									MAGNIFY = 10,
-								   TXTCOLOR = 24'hFFFFFF,
-								   BGCOLOR =  24'h000000,
 								   DIGWIDTH = 6,
 								   DIGHEIGHT = 8)
-                  (input  logic [9:0] x, y, xoff, yoff,
-                   output logic [7:0] r, g, b);
+                  (input  logic [9:0]  x, y, xoff, yoff, str_addr, str_length,
+                   output logic        pixel);
     
     logic [7:0] char_address;
-    logic       pixel;
     logic [5:0] chars [743:0];
     logic [5:0] line, xcharoff;
-	 logic [7:0] str [4:0];
+	 logic [7:0] text [TXT_LENGTH-1:0];
 	 logic [9:0] xrel, yrel;
 	 
     initial $readmemb("chars.txt", chars);
-    initial $readmemh(TEXTFILE, str);
+    initial $readmemh("string.txt", text);  // read in ascii encoding of text
 	 
     always_comb begin
 		  xrel = (x-xoff)/MAGNIFY;
 		  yrel = (y-yoff)/MAGNIFY;
-        if (yrel >= 0 && yrel < DIGHEIGHT && xrel >= 0 && xrel < DIGWIDTH*STR_LENGTH) begin
-				char_address = str[(xrel/DIGWIDTH)];
+        if (yrel >= 0 && yrel < DIGHEIGHT && xrel >= 0 && xrel < DIGWIDTH*str_length) begin
+				char_address = text[(str_length+xrel/DIGWIDTH)];
 				xcharoff = xrel % DIGWIDTH;
 				line = chars[{char_address, yrel[2:0]}];
 				pixel = line[DIGWIDTH-6'd1 - xcharoff];
@@ -346,7 +347,28 @@ module textDisp#(parameter TEXTFILE = "string.txt",
             line = 0;
             pixel = 0;
         end
-        {r, g, b} = pixel ? TXTCOLOR : BGCOLOR;
     end
 endmodule
-*/
+
+module msgDisp (input logic [9:0]   x, y,
+					 input logic [2:0]   msg_sel,
+					 output logic        pixel,
+					 output logic [23:0] textcolor);
+	
+	logic [9:0]  xoff, yoff, str_addr, str_length;
+	
+	assign textcolor = 24'hFFFFFF;
+	
+	always_comb
+	 case(msg_sel)
+	 1 : begin
+	 xoff=300; yoff=300; str_addr=0; str_length=5;
+	 end
+	 default : begin
+	 xoff=0; yoff=0; str_addr=0; str_length=0;
+	 end
+	 endcase
+	 
+	 textDisp textDisp(.x(x), .y(y), .xoff(xoff), .yoff(yoff), .str_addr(str_addr), .str_length(str_length), .pixel(pixel));
+	
+endmodule
