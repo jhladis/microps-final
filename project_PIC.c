@@ -112,7 +112,7 @@ void main(void) {
  ballYvel = DEFYVELDIR_BALL;
  update_periodx = DEFUPDATEPERX;
  update_periody = DEFUPDATEPERY;
-
+/*
  while (msgSel<3){
  	readMouse(0);
  	readMouse(1);
@@ -122,7 +122,7 @@ void main(void) {
 		TMR2=0;
  	}
  }
- 
+ */
  msgSel=0;
  TMR1=0; //reset ball motion timers
  TMR2=0;
@@ -198,6 +198,9 @@ void sendtoFPGA(void){
 	SPI2: [ballXpos, ballYpos, score1, score2]
 	SPI4: [pad1Ypod, pad2Ypos, (sound select)]*/
 
+	// send reset signal to FPGA
+	fpga_reset = 1;
+
 	//mask off to prevent overflow
 	unsigned long send1 = (ballXpos<<22)|(ballYpos<<12)|((0x3f&score1)<<6)|(0x3f&score2);
 	unsigned long send2 = (pad1Ypos<<22)|(pad2Ypos<<12)|(0xfff&soundSel<<3)|(0x7&msgSel);
@@ -241,7 +244,7 @@ void initSPI(void) {
 
 	SPI4CONbits.ON = 0; // disable SPI to reset any previous state
 	junk = SPI4BUF; // read SPI buffer to clear the receive buffer
-	SPI4BRG = 9; //set BAUD rate to 1MHz, with Pclk at 20MHz 
+	SPI4BRG = 999; //set BAUD rate to 10kHz, with Pclk at 20MHz 
 	SPI4CONbits.MSTEN = 1; // enable master mode
 	SPI4CONbits.CKE = 1; // set clock-to-data timing (data centered on rising SCK edge) 
 	SPI4CONbits.MODE32 = 1; //enable 32 bit mode
@@ -249,7 +252,7 @@ void initSPI(void) {
 	
 	SPI2CONbits.ON = 0; // disable SPI to reset any previous state
 	junk = SPI2BUF; // read SPI buffer to clear the receive buffer
-	SPI2BRG = 0; //set BAUD rate to 10MHz, with Pclk at 20MHz 
+	SPI2BRG = 999; //set BAUD rate to 10kHz, with Pclk at 20MHz 
 	SPI2CONbits.MSTEN = 1; // enable master mode
 	SPI2CONbits.CKE = 1; // set clock-to-data timing (data centered on rising SCK edge) 
 	SPI2CONbits.MODE32 = 1; //enable 32 bit mode
@@ -259,11 +262,13 @@ void initSPI(void) {
 }
 
 void spi_send_receive(unsigned long send1, unsigned long send2) {
-	SPI2BUF = send1; // send data to slave
-	while (SPI2STATbits.SPIBUSY); // wait until received buffer fills, indicating data received 
-
-	SPI4BUF = send2; // send data to slave
-	while (SPI4STATbits.SPIBUSY); // wait until received buffer fills, indicating data received 
+	fpga_reset = 0;		// turn off reset signal to FPGA
+	if (!SPI2STATbits.SPIBUSY & SPI2STATbits.SPITBE & !SPI2STATbits.SPITBF) { // write data when SPI buffer is ready
+		SPI2BUF = send1; // send data to slave
+	}
+	if (!SPI4STATbits.SPIBUSY & SPI4STATbits.SPITBE & !SPI4STATbits.SPITBF) { // write data when SPI buffer is ready
+		SPI4BUF = send2; // send data to slave
+	}
 }
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
