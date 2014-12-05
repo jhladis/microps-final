@@ -14,7 +14,6 @@ module project_FPGA(input  logic       clk,
                     input  logic       sck_a, sck_b, sdo_a, sdo_b, // spi clock and output from pic
                     output logic       sdi_a, sdi_b,             // spi input to pic
                     output logic [7:0] led,
-                    
                     output logic       audio_out);             // to audio amplifier
 
     logic [9:0] paddle1, paddle2, ballx, bally;
@@ -23,10 +22,10 @@ module project_FPGA(input  logic       clk,
     logic [31:0] send_a, send_b, received_a, received_b;
     logic [7:0] r_int, g_int, b_int;
     logic [8:0] sound_sel;
-    logic [2:0] msg_sel;//, m_sel;
+    logic [2:0] msg_sel;
     
-    //assign m_sel = 3'b1;
-    
+    assign led = paddle1[9:2];
+
     vgaCont vgaCont(.clk(clk), .r_int(r_int), .g_int(g_int), .b_int(b_int),
                     .vgaclk(vgaclk), .hsync(hsync), .vsync(vsync), .sync_b(sync_b), .x(x), .y(y),
                     .r_out(r_out), .g_out(g_out), .b_out(b_out));
@@ -314,12 +313,12 @@ endmodule
 // module to play sound effects as directed by PIC
 module audio#(parameter PSIZE = 24,
               parameter DSIZE = 8)
-             (input  logic        per_clk,
-              input  logic  [8:0] sound_sel,
-              output logic        audio_out);
+             (input  logic       per_clk,
+              input  logic [8:0] sound_sel,
+              output logic       audio_out);
     
     logic                     dur_clk;
-    logic [(PSIZE+DSIZE)-1:0] sounds [127:0];
+    logic [(PSIZE+DSIZE)-1:0] sounds [63:0];
     logic [6:0]               sound_index;
     logic [PSIZE-1:0]         sound_per, per_count;
     logic [DSIZE-1:0]         sound_dur;
@@ -335,7 +334,7 @@ module audio#(parameter PSIZE = 24,
     
     always_ff@(posedge dur_clk) begin
         if (sound_dur == '0) begin
-            sound_index <= sound_sel[6:0];
+            sound_index <= sound_sel[5:0];
             {sound_per, sound_dur} <= sounds[sound_index];
         end else if (dur_count >= {sound_dur, 4'b0}) begin
             dur_count <= '0;
@@ -354,4 +353,5 @@ module audio#(parameter PSIZE = 24,
         end else
             per_count <= per_count + 1'b1;
     end
+    
 endmodule
