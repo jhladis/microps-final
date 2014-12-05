@@ -1,0 +1,19 @@
+//format: period_duration
+//period of 0 indicates silence
+//duration of 0 indicates end of sequence
+00000000
+// start-up
+01631D19
+00B18E19
+0058C719
+00000000
+// wall collision
+061A800C
+00000000
+// paddle collision
+030D400C
+00000000
+// score event
+0186A00C
+0061A864
+00000000
