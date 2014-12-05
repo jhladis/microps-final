@@ -196,9 +196,11 @@ module headerDisp#(parameter HEADHEIGHT = 10'd10,
     end
 endmodule
 
-//
 module msgDisp#(parameter TEXTCOLOR = 24'hFFFFFF,
-                          BGCOLOR = 24'h000000)
+                          BGCOLOR = 24'h000000,
+								  SCREENWIDTH = 10'd640,
+								  DIGWIDTH = 10'd6,
+								  MAGNIFY = 10'd6)
                (input  logic [9:0]  x, y,
                 input  logic [2:0]  msg_sel,
                 output logic        pixel,
@@ -207,15 +209,29 @@ module msgDisp#(parameter TEXTCOLOR = 24'hFFFFFF,
     logic [9:0]  xoff, yoff, str_addr, str_length;
     
     always_comb begin
-        textcolor = 24'hFFFFFF;
         case(msg_sel)
-            3'b1 : begin
-                xoff=10'd300; yoff=10'd300; str_addr='0; str_length=10'd5;
+            3'd1 : begin
+                str_addr=10'd0; str_length=10'd15;
+            end
+				3'd2 : begin
+                str_addr=10'd15; str_length=10'd15;
+            end
+				3'd3 : begin
+                str_addr=10'd30; str_length=10'd9;
+            end
+				3'd4 : begin
+                str_addr=10'd39; str_length=10'd12;
+            end
+				3'd5 : begin
+                str_addr=10'd51; str_length=10'd12;
             end
             default : begin
-                xoff=10'd300; yoff=10'd300; str_addr='0; str_length=10'd5;
+                str_addr=10'd0; str_length=10'd0;
             end
         endcase
+		  xoff =(SCREENWIDTH-str_length*DIGWIDTH*MAGNIFY)/2;  // center text on screen
+		  yoff=10'd200;
+		  textcolor = 24'hFFFFFF;
     end
     
     textDisp textDisp(.x(x), .y(y), .xoff(xoff), .yoff(yoff), .str_addr(str_addr), .str_length(str_length), .pixel(pixel));
@@ -225,8 +241,8 @@ endmodule
 // module to display arbitrary text at arbitrary location
 module textDisp#(parameter TEXTFILE = "string.txt",
                  CHARFILE = "chars.txt",
-                 TXT_LENGTH = 5,  // total chars in text file
-                 MAGNIFY = 10'd10,
+                 TXT_LENGTH = 63,  // total chars in text file
+                 MAGNIFY = 10'd6,
                  DIGWIDTH = 10'd6,
                  DIGHEIGHT = 10'd8)
                 (input  logic [9:0]  x, y, xoff, yoff, str_addr, str_length,
@@ -235,7 +251,7 @@ module textDisp#(parameter TEXTFILE = "string.txt",
     logic [7:0] char_address;
     logic [5:0] chars [743:0];
     logic [5:0] line, xcharoff;
-    logic [7:0] text [TXT_LENGTH-1:0];
+    logic [7:0] text [(TXT_LENGTH-1):0];
     logic [9:0] xrel, yrel;
     
     initial $readmemb("chars.txt", chars);
@@ -245,10 +261,10 @@ module textDisp#(parameter TEXTFILE = "string.txt",
         xrel = (x-xoff)/MAGNIFY;
         yrel = (y-yoff)/MAGNIFY;
         if (yrel >= '0 && yrel < DIGHEIGHT && xrel >= '0 && xrel < DIGWIDTH*str_length) begin
-            char_address = text[(str_length+xrel/DIGWIDTH)];
+            char_address = text[(str_addr+xrel/DIGWIDTH)]; // which character in string
             xcharoff = xrel % DIGWIDTH;
-            line = chars[{char_address, yrel[2:0]}];
-            pixel = line[DIGWIDTH-6'd1 - xcharoff];
+            line = chars[{char_address, yrel[2:0]}]; // which line in character rom
+            pixel = line[DIGWIDTH-6'd1 - xcharoff]; // which pixel in line
         end else begin
             char_address = '0;
             xcharoff = '0;
