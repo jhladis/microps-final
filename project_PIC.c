@@ -79,7 +79,16 @@ void updateBall(void);        // update ball position and velocity
 #define PADTHICKNESS 10
 #define BALLRADIUS 10
 
+#define MSG_PAUSE 3*1000000/12.8 // 1:256 prescaler, 20MHz PB_clk
+								 // time to display each message
 #define PLAYING (score1<WINSCORE && score2<WINSCORE)
+
+// sound effect adresses to send
+#define START_SOUND 0
+#define WALL_SOUND  0
+#define PAD_SOUND   0
+#define SCORE_SOUND 0
+#define END_SOUND   0
 
 // global variables
 long ballXpos, ballYpos; // 10 bits for each position
@@ -88,9 +97,9 @@ long pad2Ypos = 240;
 unsigned short update_periodx, update_periody;
 signed short ballXvel, ballYvel;
 
-short msgSel = 1; // 3 bits for game messages
+short msgSel = 0; // 3 bits for game messages
 
-short soundSel = 0; // up to 12 bit sound selecor
+short soundSel = START_SOUND; // up to 12 bit sound selecor
 
 short score1 = 0; // 6 bits for score
 short score2 = 0; 
@@ -112,39 +121,46 @@ void main(void) {
  ballYvel = DEFYVELDIR_BALL;
  update_periodx = DEFUPDATEPERX;
  update_periody = DEFUPDATEPERY;
-/*
+ 
+ TMR2=0;
  while (msgSel<3){
  	readMouse(0);
  	readMouse(1);
  	sendtoFPGA();
- 	if (TMR2>3*1000000/12.8){
+ 	if (TMR2>MSG_PAUSE){
  		msgSel++;
 		TMR2=0;
  	}
  }
- */
+ 
  msgSel=0;
  TMR1=0; //reset ball motion timers
- TMR2=0;
-
- while(1) {  // main game loop
-	if (PLAYING){
-		readMouse(0);
-		readMouse(1);
-	} else msgSel=4;
-	updateBall();
+ TMR4=0;
+ while(PLAYING) {  // main game loop
+	readMouse(0);
+	readMouse(1);
+    updateBall();
 	sendtoFPGA();
  } 
-}
 
+ msgSel=3;
+ TMR2=0;
+ while (1){
+	updateBall();
+ 	sendtoFPGA();
+ 	if (TMR2>MSG_PAUSE){
+	msgSel = (score1>=WINSCORE) ? 4 : 5;
+ 	}
+ }
+}
 
 void updateBall(void){
 	if (TMR1>=update_periodx){
     	TMR1=0; // reset timer
 		ballXpos+=ballXvel; // update ball position
 	}
-	if (TMR2>=update_periody){
-    	TMR2=0; // reset timer
+	if (TMR4>=update_periody){
+    	TMR4=0; // reset timer
 		ballYpos+=ballYvel; // update ball position
 	}
 
@@ -153,9 +169,11 @@ void updateBall(void){
  			// means reflected with paddle, or game over
 	 		ballXpos=XHIGH-BALLRADIUS-PADTHICKNESS;
 	 		ballXvel=-1*ballXvel;
+			soundSel = (PLAYING) ? PAD_SOUND : WALL_SOUND;
  		} else { //reset ball with default values
  			// if missed paddle, incement other player's score, reset ball
  			score1++; 
+			soundSel = SCORE_SOUND;
  			ballXpos = DEFXPOS_BALL;
  			ballYpos = DEFYPOS_BALL;
  			ballXvel = DEFXVELDIR_BALL;
@@ -171,9 +189,11 @@ void updateBall(void){
  			// means reflected with paddle, or game over
  			ballXpos=XLOW+BALLRADIUS+PADTHICKNESS;
  			ballXvel=-1*ballXvel;
+			soundSel = (PLAYING) ? PAD_SOUND : WALL_SOUND;
  		} else { //reset ball with default values
  			// if missed paddle, incement other player's score, reset ball
  			score2++; 
+			soundSel = SCORE_SOUND;
  			ballXpos = DEFXPOS_BALL;
  			ballYpos = DEFYPOS_BALL;
  			ballXvel = DEFXVELDIR_BALL;
@@ -186,10 +206,12 @@ void updateBall(void){
  	if (ballYpos>YHIGH-BALLRADIUS) {
  		ballYpos=YHIGH-BALLRADIUS;
  		ballYvel=-1*ballYvel;
+		soundSel = WALL_SOUND;
  	}
  	if (ballYpos<YLOW+BALLRADIUS) {
  		ballYpos=YLOW+BALLRADIUS;
  		ballYvel=-1*ballYvel;
+		soundSel = WALL_SOUND;
  	}
 }
 
@@ -198,13 +220,12 @@ void sendtoFPGA(void){
 	SPI2: [ballXpos, ballYpos, score1, score2]
 	SPI4: [pad1Ypod, pad2Ypos, (sound select)]*/
 
-	// send reset signal to FPGA
-	fpga_reset = 1;
-
 	//mask off to prevent overflow
+    fpga_reset=1; //reset fpga SPI module
 	unsigned long send1 = (ballXpos<<22)|(ballYpos<<12)|((0x3f&score1)<<6)|(0x3f&score2);
 	unsigned long send2 = (pad1Ypos<<22)|(pad2Ypos<<12)|(0xfff&soundSel<<3)|(0x7&msgSel);
-	spi_send_receive(send1, send2);
+	fpga_reset=0;
+	spi_send_receive(send2, send1);
 }
 
 
@@ -231,6 +252,7 @@ void initTimers(void) {
 // bit 0: unused
 T1CON = 0b1001000000110000;
 T2CON = 0b1001000001111000;
+T4CON = 0b1001000000111000;
 }
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -244,7 +266,7 @@ void initSPI(void) {
 
 	SPI4CONbits.ON = 0; // disable SPI to reset any previous state
 	junk = SPI4BUF; // read SPI buffer to clear the receive buffer
-	SPI4BRG = 999; //set BAUD rate to 10kHz, with Pclk at 20MHz 
+	SPI4BRG = 1999; //set BAUD rate to 1MHz, with Pclk at 20MHz 
 	SPI4CONbits.MSTEN = 1; // enable master mode
 	SPI4CONbits.CKE = 1; // set clock-to-data timing (data centered on rising SCK edge) 
 	SPI4CONbits.MODE32 = 1; //enable 32 bit mode
@@ -252,7 +274,7 @@ void initSPI(void) {
 	
 	SPI2CONbits.ON = 0; // disable SPI to reset any previous state
 	junk = SPI2BUF; // read SPI buffer to clear the receive buffer
-	SPI2BRG = 999; //set BAUD rate to 10kHz, with Pclk at 20MHz 
+	SPI2BRG = 1999; //set BAUD rate to 10MHz, with Pclk at 20MHz 
 	SPI2CONbits.MSTEN = 1; // enable master mode
 	SPI2CONbits.CKE = 1; // set clock-to-data timing (data centered on rising SCK edge) 
 	SPI2CONbits.MODE32 = 1; //enable 32 bit mode
@@ -262,13 +284,11 @@ void initSPI(void) {
 }
 
 void spi_send_receive(unsigned long send1, unsigned long send2) {
-	fpga_reset = 0;		// turn off reset signal to FPGA
-	if (!SPI2STATbits.SPIBUSY & SPI2STATbits.SPITBE & !SPI2STATbits.SPITBF) { // write data when SPI buffer is ready
-		SPI2BUF = send1; // send data to slave
-	}
-	if (!SPI4STATbits.SPIBUSY & SPI4STATbits.SPITBE & !SPI4STATbits.SPITBF) { // write data when SPI buffer is ready
-		SPI4BUF = send2; // send data to slave
-	}
+	SPI2BUF = send1; // send data to slave
+	while (SPI2STATbits.SPIBUSY); // wait until received buffer fills, indicating data received 
+
+	SPI4BUF = send2; // send data to slave
+	while (SPI4STATbits.SPIBUSY); // wait until received buffer fills, indicating data received 
 }
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
