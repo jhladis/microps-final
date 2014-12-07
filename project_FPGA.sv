@@ -38,9 +38,7 @@ module project_FPGA(input  logic       clk,
     logic [31:0] send_a, send_b, received_a, received_b;
     logic [7:0] r_int, g_int, b_int;
     logic [8:0] sound_sel;
-    logic [2:0] msg_sel; //m_sel;
-    
-    //assign m_sel = 3'd1;
+    logic [2:0] msg_sel;
     
     vgaCont vgaCont(.clk(clk), .r_int(r_int), .g_int(g_int), .b_int(b_int),
                     .vgaclk(vgaclk), .hsync(hsync), .vsync(vsync), .sync_b(sync_b), .x(x), .y(y),
@@ -55,11 +53,11 @@ module project_FPGA(input  logic       clk,
     spiSlave spiSlave2(.sck(sck_b), .sdo(sdo_b), .sdi(sdi_b), .reset(spiRst), .vsync(vsync),
                        .d(send_b), .q(received_b));
     
-    dataDecode dataDecode(.send_a(send_a), .send_b(send_b), .received_a(received_b), .received_b(received_a),
+    dataDecode dataDecode(.send_a(send_a), .send_b(send_b), .received_a(received_a), .received_b(received_b),
                           .ballx(ballx), .bally(bally), .score1(score1), .score2(score2),
                           .paddle1(paddle1), .paddle2(paddle2), .sound_sel(sound_sel), .msg_sel(msg_sel));
 
-    //audio audio(.per_clk(clk), .sound_sel(sound_sel), .audio_out(audio_out));
+    audio audio(.per_clk(clk), .sound_sel(sound_sel), .audio_out(audio_out));
 endmodule
 
 
@@ -79,7 +77,7 @@ module vgaCont#(parameter HMAX   = 10'd800,
     logic       valid;
     
     // use PLL to create 25.175 MHz VGA clock
-    pll pll_inst (.areset ( areset_sig ),
+    vgaPLL vgaPLL_inst (.areset ( areset_sig ),
                         .inclk0 ( clk ),
                         .c0 ( vgaclk ),
                         .locked ( locked_sig ));
@@ -332,7 +330,7 @@ module audio#(parameter PSIZE = 24,
               output logic        audio_out);
     
     logic                     dur_clk;
-    logic [(PSIZE+DSIZE)-1:0] sounds [127:0];
+    logic [(PSIZE+DSIZE)-1:0] sounds [63:0];
     logic [6:0]               sound_index;
     logic [PSIZE-1:0]         sound_per, per_count;
     logic [DSIZE-1:0]         sound_dur;
@@ -348,7 +346,7 @@ module audio#(parameter PSIZE = 24,
     
     always_ff@(posedge dur_clk) begin
         if (sound_dur == '0) begin
-            sound_index <= sound_sel[6:0];
+            sound_index <= sound_sel[5:0];
             {sound_per, sound_dur} <= sounds[sound_index];
         end else if (dur_count >= {sound_dur, 4'b0}) begin
             dur_count <= '0;
