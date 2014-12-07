@@ -5,6 +5,21 @@
   SystemVerilog code for Pong game
 */
 
+// Define game parameters
+`define SCREENWIDTH 10'd640
+`define SCREENHEIGHT 10'd480
+`define PADDLEWIDTH 10'd10
+`define PADDLEHEIGHT 10'd50
+`define BALLSIZE 10'd95
+`define PADDLECOLOR 24'hFFFFFF
+`define BALLCOLOR 24'h6060FF
+`define BGCOLOR 24'h000000 // {R,G,B}
+
+`define CHARFILE "chars.txt"
+`define CHARWIDTH 10'd6
+`define CHARHEIGHT 10'd8
+
+
 module project_FPGA(input  logic       clk,
                     output logic       vgaclk,                 // 25 MHz VGA clock
                     output logic       hsync, vsync, sync_b,   // to monitor & DAC
@@ -14,6 +29,7 @@ module project_FPGA(input  logic       clk,
                     input  logic       sck_a, sck_b, sdo_a, sdo_b, // spi clock and output from pic
                     output logic       sdi_a, sdi_b,             // spi input to pic
                     output logic [7:0] led,
+                    
                     output logic       audio_out);             // to audio amplifier
 
     logic [9:0] paddle1, paddle2, ballx, bally;
@@ -24,8 +40,6 @@ module project_FPGA(input  logic       clk,
     logic [8:0] sound_sel;
     logic [2:0] msg_sel;
     
-    assign led = paddle1[9:2];
-
     vgaCont vgaCont(.clk(clk), .r_int(r_int), .g_int(g_int), .b_int(b_int),
                     .vgaclk(vgaclk), .hsync(hsync), .vsync(vsync), .sync_b(sync_b), .x(x), .y(y),
                     .r_out(r_out), .g_out(g_out), .b_out(b_out));
@@ -51,9 +65,7 @@ endmodule
 module vgaCont#(parameter HMAX   = 10'd800,
                           VMAX   = 10'd525, 
                           HSTART = 10'd152,
-                          WIDTH  = 10'd640,
-                          VSTART = 10'd37,
-                          HEIGHT = 10'd480)
+                          VSTART = 10'd37)
                (input  logic       clk,
                 input  logic [7:0] r_int, g_int, b_int,
                 output logic       vgaclk, hsync, vsync, sync_b,
@@ -91,20 +103,13 @@ module vgaCont#(parameter HMAX   = 10'd800,
     assign y = vcnt - VSTART;
     
     // force outputs to black when outside the legal display area
-    assign valid = (hcnt >= HSTART & hcnt < HSTART+WIDTH &
-                    vcnt >= VSTART & vcnt < VSTART+HEIGHT);
+    assign valid = (hcnt >= HSTART & hcnt < HSTART+`SCREENWIDTH &
+                    vcnt >= VSTART & vcnt < VSTART+`SCREENHEIGHT);
     assign {r_out,g_out,b_out} = valid ? {r_int,g_int,b_int} : 24'b0;
 endmodule
 
 // module to determine a given pixel's color
-module videoGen#(parameter SCREENWIDTH = 10'd640,
-                           SCREENHEIGHT = 10'd480,
-                           PADDLEWIDTH = 10'd10,
-                           PADDLEHEIGHT = 10'd50,
-                           BALLSIZE = 10'd95,
-                           PADDLECOLOR = 24'hFFFFFF,
-                           BALLCOLOR = 24'h6060FF)
-                (input  logic [9:0] paddle1, paddle2, ballx, bally, x, y,
+module videoGen (input  logic [9:0] paddle1, paddle2, ballx, bally, x, y,
                  input  logic [5:0] score1, score2,
                  input  logic [2:0] msg_sel,
                  output logic [7:0] r_int, g_int, b_int);
@@ -123,20 +128,20 @@ module videoGen#(parameter SCREENWIDTH = 10'd640,
     logic [19:0] dist2ballr;
     
     always_comb begin
-        in_paddle1 = (x < PADDLEWIDTH) & (y >= paddle1) & (y < paddle1+PADDLEHEIGHT);
-        in_paddle2 = (x >= SCREENWIDTH-PADDLEWIDTH) & (y >= paddle2) & (y < paddle2+PADDLEHEIGHT);
+        in_paddle1 = (x < `PADDLEWIDTH) & (y >= paddle1) & (y < paddle1+`PADDLEHEIGHT);
+        in_paddle2 = (x >= `SCREENWIDTH-`PADDLEWIDTH) & (y >= paddle2) & (y < paddle2+`PADDLEHEIGHT);
     
         dist2ballx = (x > ballx) ? (x - ballx) : (ballx - x);
         dist2bally = (y > bally) ? (y - bally) : (bally - y);
         dist2ballr = (dist2ballx*dist2ballx + dist2bally*dist2bally);
-        in_ball = dist2ballr >= '0 & dist2ballr <= BALLSIZE;
+        in_ball = dist2ballr >= '0 & dist2ballr <= `BALLSIZE;
         
         if (in_text)
             {r_int, g_int, b_int} = textcolor;
         else if (in_ball)
-            {r_int, g_int, b_int} = BALLCOLOR;
+            {r_int, g_int, b_int} = `BALLCOLOR;
         else if (in_paddle1 | in_paddle2)
-            {r_int, g_int, b_int} = PADDLECOLOR;
+            {r_int, g_int, b_int} = `PADDLECOLOR;
         else
             {r_int, g_int, b_int} = {r_head, g_head, b_head};
     end
@@ -144,10 +149,7 @@ endmodule
 
 // module to display header at top of screen, includes score
 module headerDisp#(parameter HEADHEIGHT = 10'd10,
-                             CHARHEIGHT = 10'd8,
-                             SCREENWIDTH = 10'd640,
                              LABELWIDTH = 10'd60,
-                             BGCOLOR = 24'h000000,
                              DIGCOLOR = 24'hFFFFFF)
                   (input  logic [9:0] x, y,
                    input  logic [5:0] score1, score2,
@@ -159,7 +161,7 @@ module headerDisp#(parameter HEADHEIGHT = 10'd10,
     logic [5:0] line;
     logic       pixel;
     
-    initial $readmemb("chars.txt", chars);
+    initial $readmemb(`CHARFILE, chars);
     initial $readmemh("str.txt", str);
     
     always_comb begin
@@ -168,19 +170,19 @@ module headerDisp#(parameter HEADHEIGHT = 10'd10,
         digit_2a = score2 / 6'd10;
         digit_2b = score2 % 6'd10;
     
-        if (y < CHARHEIGHT) begin
+        if (y < `CHARHEIGHT) begin
             if (x < LABELWIDTH) begin
                 str[6] = 8'h31;
                 str[8] = digit_1a + 8'h30;
                 str[9] = digit_1b + 8'h30;
                 line = chars[{str[x/10'd6], y[2:0]}];
                 pixel = line[3'd5 - x % 10'd6];
-            end else if (x >= SCREENWIDTH - LABELWIDTH) begin
+            end else if (x >= `SCREENWIDTH - LABELWIDTH) begin
                 str[6] = 8'h32;
                 str[8] = digit_2a + 8'h30;
                 str[9] = digit_2b + 8'h30;
-                line = chars[{str[(x-(SCREENWIDTH-LABELWIDTH))/10'd6], y[2:0]}];
-                pixel = line[3'd5 - (x - (SCREENWIDTH-LABELWIDTH)) % 10'd6];
+                line = chars[{str[(x-(`SCREENWIDTH-LABELWIDTH))/10'd6], y[2:0]}];
+                pixel = line[3'd5 - (x - (`SCREENWIDTH-LABELWIDTH)) % 10'd6];
             end else begin
                 line = '0;
                 pixel = 0;
@@ -192,15 +194,12 @@ module headerDisp#(parameter HEADHEIGHT = 10'd10,
             line = '0;
             pixel = 0;
         end
-        {r, g, b} = pixel ? DIGCOLOR : BGCOLOR;
+        {r, g, b} = pixel ? DIGCOLOR : `BGCOLOR;
     end
 endmodule
 
-module msgDisp#(parameter TEXTCOLOR = 24'hFFFFFF,
-                          BGCOLOR = 24'h000000,
-								  SCREENWIDTH = 10'd640,
-								  DIGWIDTH = 10'd6,
-								  MAGNIFY = 10'd6)
+
+module msgDisp#(parameter MAGNIFY = 10'd6)
                (input  logic [9:0]  x, y,
                 input  logic [2:0]  msg_sel,
                 output logic        pixel,
@@ -229,23 +228,20 @@ module msgDisp#(parameter TEXTCOLOR = 24'hFFFFFF,
                 str_addr=10'd0; str_length=10'd0;
             end
         endcase
-		  xoff =(SCREENWIDTH-str_length*DIGWIDTH*MAGNIFY)/2;  // center text on screen
+		  xoff =(`SCREENWIDTH-str_length*`CHARWIDTH*MAGNIFY)/2;  // center text on screen
 		  yoff=10'd200;
 		  textcolor = 24'hFFFFFF;
     end
     
-    textDisp textDisp(.x(x), .y(y), .xoff(xoff), .yoff(yoff), .str_addr(str_addr), .str_length(str_length), .pixel(pixel));
+    textDisp textDisp(.x(x), .y(y), .xoff(xoff), .yoff(yoff), .str_addr(str_addr),
+							.str_length(str_length), .magnify(MAGNIFY), .pixel(pixel));
     
 endmodule
 
 // module to display arbitrary text at arbitrary location
 module textDisp#(parameter TEXTFILE = "string.txt",
-                 CHARFILE = "chars.txt",
-                 TXT_LENGTH = 63,  // total chars in text file
-                 MAGNIFY = 10'd6,
-                 DIGWIDTH = 10'd6,
-                 DIGHEIGHT = 10'd8)
-                (input  logic [9:0]  x, y, xoff, yoff, str_addr, str_length,
+                 TXT_LENGTH = 63)  // total chars in text file)
+                (input  logic [9:0]  x, y, xoff, yoff, str_addr, str_length, magnify,
                  output logic        pixel);
     
     logic [7:0] char_address;
@@ -254,17 +250,17 @@ module textDisp#(parameter TEXTFILE = "string.txt",
     logic [7:0] text [(TXT_LENGTH-1):0];
     logic [9:0] xrel, yrel;
     
-    initial $readmemb("chars.txt", chars);
-    initial $readmemh("string.txt", text);  // read in ascii encoding of text
+    initial $readmemb(`CHARFILE, chars);
+    initial $readmemh(TEXTFILE, text);  // read in ascii encoding of text
     
     always_comb begin
-        xrel = (x-xoff)/MAGNIFY;
-        yrel = (y-yoff)/MAGNIFY;
-        if (yrel >= '0 && yrel < DIGHEIGHT && xrel >= '0 && xrel < DIGWIDTH*str_length) begin
-            char_address = text[(str_addr+xrel/DIGWIDTH)]; // which character in string
-            xcharoff = xrel % DIGWIDTH;
+        xrel = (x-xoff)/magnify;
+        yrel = (y-yoff)/magnify;
+        if (yrel >= '0 && yrel < `CHARHEIGHT && xrel >= '0 && xrel < `CHARWIDTH*str_length) begin
+            char_address = text[(str_addr+xrel/`CHARWIDTH)]; // which character in string
+            xcharoff = xrel % `CHARWIDTH;
             line = chars[{char_address, yrel[2:0]}]; // which line in character rom
-            pixel = line[DIGWIDTH-6'd1 - xcharoff]; // which pixel in line
+            pixel = line[`CHARWIDTH-6'd1 - xcharoff]; // which pixel in line
         end else begin
             char_address = '0;
             xcharoff = '0;
@@ -329,9 +325,9 @@ endmodule
 // module to play sound effects as directed by PIC
 module audio#(parameter PSIZE = 24,
               parameter DSIZE = 8)
-             (input  logic       per_clk,
-              input  logic [8:0] sound_sel,
-              output logic       audio_out);
+             (input  logic        per_clk,
+              input  logic  [8:0] sound_sel,
+              output logic        audio_out);
     
     logic                     dur_clk;
     logic [(PSIZE+DSIZE)-1:0] sounds [63:0];
@@ -369,5 +365,4 @@ module audio#(parameter PSIZE = 24,
         end else
             per_count <= per_count + 1'b1;
     end
-    
 endmodule
