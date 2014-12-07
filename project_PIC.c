@@ -84,11 +84,11 @@ void updateBall(void);        // update ball position and velocity
 #define PLAYING (score1<WINSCORE && score2<WINSCORE)
 
 // sound effect adresses to send
-#define START_SOUND 0
-#define WALL_SOUND  0
-#define PAD_SOUND   0
-#define SCORE_SOUND 0
-#define END_SOUND   0
+#define START_SOUND 0x1
+#define WALL_SOUND  0x6
+#define PAD_SOUND   0x9
+#define SCORE_SOUND 0xC
+#define END_SOUND   0x10
 
 // global variables
 long ballXpos, ballYpos; // 10 bits for each position
@@ -97,14 +97,14 @@ long pad2Ypos = 240;
 unsigned short update_periodx, update_periody;
 signed short ballXvel, ballYvel;
 
-short msgSel = 0; // 3 bits for game messages
+short msgSel = 1; // 3 bits for game messages
 
-short soundSel = START_SOUND; // up to 12 bit sound selecor
+short soundSel = START_SOUND; // up to 12 bit sound selector
 
 short score1 = 0; // 6 bits for score
 short score2 = 0; 
 
-#define WINSCORE 10 //max of 63 because only 6 bits
+#define WINSCORE 2 //max of 63 because only 6 bits
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -146,6 +146,8 @@ void main(void) {
  msgSel=3;
  TMR2=0;
  while (1){
+	readMouse(0);
+	readMouse(1);
 	updateBall();
  	sendtoFPGA();
  	if (TMR2>MSG_PAUSE){
@@ -169,11 +171,12 @@ void updateBall(void){
  			// means reflected with paddle, or game over
 	 		ballXpos=XHIGH-BALLRADIUS-PADTHICKNESS;
 	 		ballXvel=-1*ballXvel;
-			soundSel = (PLAYING) ? PAD_SOUND : WALL_SOUND;
+			if (PLAYING) soundSel = PAD_SOUND;
  		} else { //reset ball with default values
  			// if missed paddle, incement other player's score, reset ball
  			score1++; 
-			soundSel = SCORE_SOUND;
+			if (score1==WINSCORE || score2==WINSCORE) soundSel = END_SOUND;
+			else soundSel = SCORE_SOUND;
  			ballXpos = DEFXPOS_BALL;
  			ballYpos = DEFYPOS_BALL;
  			ballXvel = DEFXVELDIR_BALL;
@@ -189,11 +192,12 @@ void updateBall(void){
  			// means reflected with paddle, or game over
  			ballXpos=XLOW+BALLRADIUS+PADTHICKNESS;
  			ballXvel=-1*ballXvel;
-			soundSel = (PLAYING) ? PAD_SOUND : WALL_SOUND;
+			if (PLAYING) soundSel = PAD_SOUND;
  		} else { //reset ball with default values
  			// if missed paddle, incement other player's score, reset ball
- 			score2++; 
-			soundSel = SCORE_SOUND;
+ 			score2++;
+			if (score1==WINSCORE || score2==WINSCORE) soundSel = END_SOUND; 
+			else soundSel = SCORE_SOUND;
  			ballXpos = DEFXPOS_BALL;
  			ballYpos = DEFYPOS_BALL;
  			ballXvel = DEFXVELDIR_BALL;
@@ -206,12 +210,12 @@ void updateBall(void){
  	if (ballYpos>YHIGH-BALLRADIUS) {
  		ballYpos=YHIGH-BALLRADIUS;
  		ballYvel=-1*ballYvel;
-		soundSel = WALL_SOUND;
+//		if (PLAYING) soundSel = WALL_SOUND;
  	}
  	if (ballYpos<YLOW+BALLRADIUS) {
  		ballYpos=YLOW+BALLRADIUS;
  		ballYvel=-1*ballYvel;
-		soundSel = WALL_SOUND;
+//		if (PLAYING) soundSel = WALL_SOUND;
  	}
 }
 
@@ -222,10 +226,11 @@ void sendtoFPGA(void){
 
 	//mask off to prevent overflow
     fpga_reset=1; //reset fpga SPI module
-	unsigned long send1 = (ballXpos<<22)|(ballYpos<<12)|((0x3f&score1)<<6)|(0x3f&score2);
-	unsigned long send2 = (pad1Ypos<<22)|(pad2Ypos<<12)|(0xfff&soundSel<<3)|(0x7&msgSel);
+	unsigned long send1 = (ballXpos<<22)|(ballYpos<<12)|(0xfff&soundSel<<3)|(0x7&msgSel);
+	unsigned long send2 = (pad1Ypos<<22)|(pad2Ypos<<12)|((0x3f&score1)<<6)|(0x3f&score2);
 	fpga_reset=0;
-	spi_send_receive(send2, send1);
+	soundSel=0; // reset so sound effect is played only once
+	spi_send_receive(send1, send2);
 }
 
 
