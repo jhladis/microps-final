@@ -2,26 +2,26 @@
 //period of 0 indicates silence
 //duration of 0 indicates end of sequence
 00000000
-// start-up
+// start-up: 0x1
 02553719	//c4
 01DA0419	//e4
 018E9819	//g4
 012A9D19	//c5
 00000000
-// wall collision
-0255370A	//c4
-012A9D14	//c5
+// wall collision: 0x6
+02553702	//c4
+012A9D04	//c5
 00000000
-// paddle collision
+// paddle collision: 0x9
 0255370A	//c4
 00ED0314	//e5
 00000000
-// score event
+// score event: 0xC
 018E9814	//g4
 012A9D0A	//c5
 018E9814	//g4
 00000000
-// game over
+// game over: 0x10
 012A9D19	//c5
 018E9819	//g4
 01DA0419	//e4
