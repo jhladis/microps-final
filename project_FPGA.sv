@@ -321,8 +321,8 @@ module dataDecode(input  [31:0] received_a, received_b,
     always_comb begin
         send_a = '0;         // don't send anything
         send_b = '0;         // don't send anything
-        {ballx, bally, score1, score2} = received_a;
-        {paddle1, paddle2, sound_sel, msg_sel} = received_b;
+        {ballx, bally, sound_sel, msg_sel} = received_a;
+        {paddle1, paddle2, score1, score2} = received_b;
     end
 endmodule
 
