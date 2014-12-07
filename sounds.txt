@@ -3,17 +3,27 @@
 //duration of 0 indicates end of sequence
 00000000
 // start-up
-01631D19
-00B18E19
-0058C719
+02553719	//c4
+01DA0419	//e4
+018E9819	//g4
+012A9D19	//c5
 00000000
 // wall collision
-061A800C
+0255370A	//c4
+012A9D14	//c5
 00000000
 // paddle collision
-030D400C
+0255370A	//c4
+00ED0314	//e5
 00000000
 // score event
-0186A00C
-0061A864
+018E9814	//g4
+012A9D0A	//c5
+018E9814	//g4
+00000000
+// game over
+012A9D19	//c5
+018E9819	//g4
+01DA0419	//e4
+02553719	//c4
 00000000
