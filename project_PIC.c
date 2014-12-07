@@ -104,7 +104,7 @@ short soundSel = START_SOUND; // up to 12 bit sound selector
 short score1 = 0; // 6 bits for score
 short score2 = 0; 
 
-#define WINSCORE 2 //max of 63 because only 6 bits
+#define WINSCORE 10 //max of 63 because only 6 bits
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
